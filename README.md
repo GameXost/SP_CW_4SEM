@@ -1,2 +1,2 @@
 # SP_CW_4SEM
-GG WP
+GG_WP
