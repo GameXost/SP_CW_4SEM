@@ -28,7 +28,7 @@ enum class Constraint {
 using Value = std::variant<std::monostate, int, std::string>;
 
 // Ссылка на таблицу: "table" или "db.table"
-struct TableRef {
+struct TableReferenceerence {
     std::optional<std::string> db;   // отсутствует если USE уже выбрал контекст
     std::string                table;
 };
@@ -197,14 +197,14 @@ struct ColumnDef {
 
 // CREATE TABLE name (col1 TYPE MODIFIER, ...);
 struct CreateTableStmt : ASTNode {
-    TableRef              table;
+    TableReference              table;
     std::vector<ColumnDef> columns;
     void accept(Visitor& v) override { v.visit(*this); }
 };
 
 // DROP TABLE name;
 struct DropTableStmt : ASTNode {
-    TableRef table;
+    TableReference table;
     void accept(Visitor& v) override { v.visit(*this); }
 };
 ```
@@ -216,7 +216,7 @@ struct DropTableStmt : ASTNode {
 ```cpp
 // INSERT INTO table (col1, col2) VALUE (v1, v2), (v3, v4);
 struct InsertStmt : ASTNode {
-    TableRef                          table;
+    TableReference                          table;
     std::vector<std::string>          columns;   // список колонок
     std::vector<std::vector<Value>>   rows;      // одна или несколько строк
     void accept(Visitor& v) override { v.visit(*this); }
@@ -224,7 +224,7 @@ struct InsertStmt : ASTNode {
 
 // UPDATE table SET col1 = val1, col2 = val2 WHERE condition;
 struct UpdateStmt : ASTNode {
-    TableRef                                    table;
+    TableReference                                    table;
     std::vector<std::pair<std::string, Value>>  assignments;   // SET-часть
     std::unique_ptr<ExprNode>                   where;         // nullptr если нет WHERE
     void accept(Visitor& v) override { v.visit(*this); }
@@ -232,7 +232,7 @@ struct UpdateStmt : ASTNode {
 
 // DELETE FROM table WHERE condition;
 struct DeleteStmt : ASTNode {
-    TableRef                  table;
+    TableReference                  table;
     std::unique_ptr<ExprNode> where;   // nullptr если нет WHERE
     void accept(Visitor& v) override { v.visit(*this); }
 };
@@ -252,7 +252,7 @@ struct SelectColumn {
 // SELECT */cols FROM table WHERE condition;
 // Если columns пустой - SELECT *
 struct SelectStmt : ASTNode {
-    TableRef                   table;
+    TableReference                   table;
     std::vector<SelectColumn>  columns;   // пустой = SELECT *
     std::unique_ptr<ExprNode>  where;     // nullptr если нет WHERE
     void accept(Visitor& v) override { v.visit(*this); }
