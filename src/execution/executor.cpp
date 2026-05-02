@@ -3,30 +3,23 @@
 #include <regex>
 #include <stdexcept>
 #include <unordered_map>
-// #include "../include/nlohmann/json.hpp"
 
-
-Executor::Executor(Catalog& catalog, Storage& storage)
-    : _catalog(catalog), _storage(storage) {}
-
+Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {}
 
 ExecuteResult Executor::execute(ASTNode& node) {
     _result = {};
     try {
         node.accept(*this);
     } catch (const std::exception& e) {
-        _result.ok      = false;
+        _result.ok = false;
         _result.message = e.what();
     }
     return _result;
 }
 
-
-std::pair<std::string, std::string>
-Executor::resolve(const TableReference& ref) const {
+std::pair<std::string, std::string> Executor::resolve(const TableReference& ref) const {
     std::string db = ref.db.value_or(_current_db);
-    if (db.empty())
-        throw std::runtime_error("No database selected. Use USE <db>.");
+    if (db.empty()) throw std::runtime_error("No database selected. Use USE <db>.");
     return {db, ref.table};
 }
 
@@ -69,31 +62,30 @@ void Executor::visit(DropTableStmt& s) {
 void Executor::visit(InsertStmt& s) {
     auto [db, table] = resolve(s.table);
     const auto& schema = _catalog.getSchema(db, table);
-
     int inserted = 0;
-    for (const auto& src_row : s.rows) {
-        if (src_row.size() != s.columns.size())
-            throw std::runtime_error("INSERT: column count mismatch");
 
-        // do a full row
+    for (const auto& src_row : s.rows) {
+        if (src_row.size() != s.columns.size()) {
+            throw std::runtime_error("INSERT: column count mismatch");
+        }
+
         std::vector<Value> full_row(schema.columns.size(), std::monostate{});
 
         for (size_t i = 0; i < s.columns.size(); ++i) {
             int idx = schema.indexOf(s.columns[i]);
-            if (idx < 0)
-                throw std::runtime_error("Unknown column: " + s.columns[i]);
+            if (idx < 0) throw std::runtime_error("Unknown column: " + s.columns[i]);
             full_row[idx] = src_row[i];
         }
 
         for (size_t i = 0; i < schema.columns.size(); ++i) {
             const auto& col = schema.columns[i];
             bool is_null = std::holds_alternative<std::monostate>(full_row[i]);
-            if (is_null && col.constraint != Constraint::NONE)
+            if (is_null && col.constraint != Constraint::NONE) {
                 throw std::runtime_error("NOT_NULL/INDEXED violation: " + col.name);
+            }
         }
 
-        auto bytes = Serializer::encodeRow(full_row);
-        _storage.write(db, table, bytes);
+        _storage.write(db, table, Serializer::encodeRow(full_row));
         ++inserted;
     }
 
@@ -105,24 +97,23 @@ void Executor::visit(UpdateStmt& s) {
     auto [db, table] = resolve(s.table);
     const auto& schema = _catalog.getSchema(db, table);
 
-    for (const auto& [col, _] : s.assignments)
-        if (schema.indexOf(col) < 0)
-            throw std::runtime_error("Unknown column: " + col);
+    for (const auto& [col, val] : s.assignments) {
+        if (schema.indexOf(col) < 0) throw std::runtime_error("Unknown column: " + col);
+    }
 
     auto records = _storage.scan(db, table);
     int updated = 0;
 
     for (auto& [rid, bytes] : records) {
-        auto row     = Serializer::decodeRow(bytes);
+        auto row = Serializer::decodeRow(bytes);
         auto row_map = makeRowMap(row, schema);
-
         if (!matchRow(s.where.get(), row_map)) continue;
 
-        for (const auto& [col, val] : s.assignments)
+        for (const auto& [col, val] : s.assignments) {
             row[schema.indexOf(col)] = val;
+        }
 
-        auto new_bytes = Serializer::encodeRow(row);
-        _storage.update(db, table, rid, new_bytes);
+        _storage.update(db, table, rid, Serializer::encodeRow(row));
         ++updated;
     }
 
@@ -133,7 +124,6 @@ void Executor::visit(UpdateStmt& s) {
 void Executor::visit(DeleteStmt& s) {
     auto [db, table] = resolve(s.table);
     const auto& schema = _catalog.getSchema(db, table);
-
     auto records = _storage.scan(db, table);
     int deleted = 0;
 
@@ -159,10 +149,10 @@ void Executor::visit(SelectStmt& s) {
         for (const auto& sc : s.columns) proj_cols.push_back(sc.name);
     }
 
-    // to json transform
     std::unordered_map<std::string, std::string> aliases;
-    for (const auto& sc : s.columns)
+    for (const auto& sc : s.columns) {
         aliases[sc.name] = sc.alias.value_or(sc.name);
+    }
 
     auto records = _storage.scan(db, table);
     nlohmann::json result = nlohmann::json::array();
@@ -173,8 +163,7 @@ void Executor::visit(SelectStmt& s) {
 
         nlohmann::json obj;
         for (const auto& col : proj_cols) {
-            if (!row_map.count(col))
-                throw std::runtime_error("Unknown column in SELECT: " + col);
+            if (!row_map.count(col)) throw std::runtime_error("Unknown column in SELECT: " + col);
             std::string out_name = aliases.count(col) ? aliases.at(col) : col;
             obj[out_name] = valueToJson(row_map.at(col));
         }
@@ -182,83 +171,73 @@ void Executor::visit(SelectStmt& s) {
     }
 
     _result.message = "OK";
-    _result.data    = std::move(result);
+    _result.data = std::move(result);
 }
 
-
-std::unordered_map<std::string, Value>
-Executor::makeRowMap(const std::vector<Value>& row, const TableSchema& schema) const {
+// helpers
+std::unordered_map<std::string, Value> Executor::makeRowMap(const std::vector<Value>& row, const TableSchema& schema) const {
     std::unordered_map<std::string, Value> m;
-    for (size_t i = 0; i < schema.columns.size() && i < row.size(); ++i)
+    for (size_t i = 0; i < schema.columns.size() && i < row.size(); ++i) {
         m[schema.columns[i].name] = row[i];
+    }
     return m;
 }
 
 nlohmann::json Executor::valueToJson(const Value& v) {
-    if (std::holds_alternative<std::monostate>(v))  return nullptr;
-    if (std::holds_alternative<int>(v))              return std::get<int>(v);
+    if (std::holds_alternative<std::monostate>(v)) return nullptr;
+    if (std::holds_alternative<int>(v)) return std::get<int>(v);
     return std::get<std::string>(v);
 }
 
-bool Executor::matchRow(const ExprNode* where,
-                        const std::unordered_map<std::string, Value>& row) const {
-    if (!where) return true;   // нет WHERE → все строки
+bool Executor::matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const {
+    if (!where) return true;
     Value result = evalExpr(where, row);
-    // результат булевых операций — int (0 или 1)
     if (std::holds_alternative<int>(result)) return std::get<int>(result) != 0;
     return false;
 }
 
-// WHERE recursive
-Value Executor::evalExpr(const ExprNode* expr,
-                         const std::unordered_map<std::string, Value>& row) const
-{
-    // literal expr
+// WHERE recursive eval
+Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::string, Value>& row) const {
     if (const auto* lit = dynamic_cast<const LiteralExpr*>(expr)) {
         return lit->value;
     }
 
-    // col expr
     if (const auto* col = dynamic_cast<const ColumnRefExpr*>(expr)) {
         auto it = row.find(col->name);
-        if (it == row.end())
-            throw std::runtime_error("Unknown column in WHERE: " + col->name);
+        if (it == row.end()) throw std::runtime_error("Unknown column in WHERE: " + col->name);
         return it->second;
     }
 
-    // bin expr
     if (const auto* bin = dynamic_cast<const BinaryExpr*>(expr)) {
-        Value lv = evalExpr(bin->left.get(),  row);
+        Value lv = evalExpr(bin->left.get(), row);
         Value rv = evalExpr(bin->right.get(), row);
 
-        if (std::holds_alternative<std::monostate>(lv) ||
-            std::holds_alternative<std::monostate>(rv))
+        if (std::holds_alternative<std::monostate>(lv) || std::holds_alternative<std::monostate>(rv))
             return 0;
 
         auto cmp = [&]() -> int {
             if (std::holds_alternative<int>(lv) && std::holds_alternative<int>(rv))
                 return std::get<int>(lv) - std::get<int>(rv);
-            if (std::holds_alternative<std::string>(lv) &&
-                std::holds_alternative<std::string>(rv))
+            if (std::holds_alternative<std::string>(lv) && std::holds_alternative<std::string>(rv))
                 return std::get<std::string>(lv).compare(std::get<std::string>(rv));
             throw std::runtime_error("Type mismatch in WHERE comparison");
         };
 
         switch (bin->oper) {
-            case BinaryOper::EQ:  return (cmp() == 0) ? 1 : 0;
+            case BinaryOper::EQ: return (cmp() == 0) ? 1 : 0;
             case BinaryOper::NEQ: return (cmp() != 0) ? 1 : 0;
-            case BinaryOper::LT:  return (cmp() <  0) ? 1 : 0;
-            case BinaryOper::GT:  return (cmp() >  0) ? 1 : 0;
+            case BinaryOper::LT: return (cmp() < 0) ? 1 : 0;
+            case BinaryOper::GT: return (cmp() > 0) ? 1 : 0;
             case BinaryOper::LTE: return (cmp() <= 0) ? 1 : 0;
             case BinaryOper::GTE: return (cmp() >= 0) ? 1 : 0;
+            default: throw std::runtime_error("Unknown binary operator");
         }
     }
 
-    // BETWEEN expr
     if (const auto* bet = dynamic_cast<const BetweenExpr*>(expr)) {
         Value val = evalExpr(bet->value.get(), row);
-        Value lo  = evalExpr(bet->low.get(),   row);
-        Value hi  = evalExpr(bet->high.get(),  row);
+        Value lo = evalExpr(bet->low.get(), row);
+        Value hi = evalExpr(bet->high.get(), row);
 
         if (std::holds_alternative<int>(val)) {
             int v = std::get<int>(val);
@@ -275,7 +254,6 @@ Value Executor::evalExpr(const ExprNode* expr,
         return 0;
     }
 
-    // LIKE expr
     if (const auto* like = dynamic_cast<const LikeExpr*>(expr)) {
         Value val = evalExpr(like->value.get(), row);
         if (!std::holds_alternative<std::string>(val)) return 0;
@@ -287,21 +265,18 @@ Value Executor::evalExpr(const ExprNode* expr,
         }
     }
 
-    // operators AND / OR expr
     if (const auto* log = dynamic_cast<const LogicalExpr*>(expr)) {
         Value lv = evalExpr(log->left.get(), row);
-        bool  lb = std::holds_alternative<int>(lv) && std::get<int>(lv) != 0;
+        bool lb = std::holds_alternative<int>(lv) && std::get<int>(lv) != 0;
 
         if (log->oper == LogicalOper::AND) {
             if (!lb) return 0;
             Value rv = evalExpr(log->right.get(), row);
-            bool  rb = std::holds_alternative<int>(rv) && std::get<int>(rv) != 0;
-            return rb ? 1 : 0;
+            return (std::holds_alternative<int>(rv) && std::get<int>(rv) != 0) ? 1 : 0;
         } else {
             if (lb) return 1;
             Value rv = evalExpr(log->right.get(), row);
-            bool  rb = std::holds_alternative<int>(rv) && std::get<int>(rv) != 0;
-            return rb ? 1 : 0;
+            return (std::holds_alternative<int>(rv) && std::get<int>(rv) != 0) ? 1 : 0;
         }
     }
 

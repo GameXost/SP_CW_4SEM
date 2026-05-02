@@ -36,6 +36,10 @@ FetchContent_MakeAvailable(json)
 
 set(PROJECT_SOURCES
     src/main.cpp
+    src/execution/executor.cpp
+    src/execution/serializer.cpp
+    src/parser/lexer.cpp
+    src/parser/ast.cpp
     # и т.д .cpp
 )
 

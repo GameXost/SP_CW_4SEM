@@ -1,10 +1,9 @@
 #pragma once
 #include <string>
-#include <optional>
+#include <nlohmann/json.hpp>
 
-// Результат возвращаемый экзекутором
 struct ExecuteResult {
-    bool        ok      = true;
+    bool ok = true;
     std::string message;
-    std::optional<std::string> data;
+    nlohmann::json data = nullptr;
 };
