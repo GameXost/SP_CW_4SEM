@@ -1,0 +1,45 @@
+name: C++ CI (Win, Mac, Linux)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    # Запускаем сборку параллельно на 3 разных ОС
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { os: windows-latest, cpp_compiler: cl }       # Windows (MSVC)
+          - { os: macos-latest, cpp_compiler: clang++ }    # Mac (Apple Clang)
+          - { os: ubuntu-latest, cpp_compiler: g++ }       # Linux (GCC)
+
+    runs-on: ${{ matrix.config.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup build directory
+      id: strings
+      shell: bash
+      run: |
+        echo "build-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-dir }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.config.cpp_compiler }}
+        -DCMAKE_BUILD_TYPE=Release
+        -S ${{ github.workspace }}
+
+    - name: Build Project
+      run: cmake --build ${{ steps.strings.outputs.build-dir }} --config Release
+
+    # Тестов нет
+    # - name: Run Tests
+    #   working-directory: ${{ steps.strings.outputs.build-dir }}
+    #   run: ctest --build-config Release
