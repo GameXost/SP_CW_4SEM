@@ -1,44 +1,38 @@
 #pragma once
-#include <vector>
-#include <cstdint>
+
 #include <string>
+#include <vector>
+#include <unordered_map>
+#include <memory>
 
+#include "../core/types.h"
 
-// Заглушка крч
-// Физический адрес записи в файле
-struct RecordId {
-    uint64_t offset = 0;   // смещение в байтах от начала файла
-    uint32_t size   = 0;   // размер записи в байтах
-};
+class Pager;
 
-// Интерфейс хранилища — реализуется в storage.cpp
-// Executor использует только эти методы
 class Storage {
+private:
+    std::string root = "./data/";
+
+    std::unordered_map<std::string, std::unique_ptr<Pager>> pagers;
+
+    std::string table_file(const std::string& db, const std::string& table) const;
+    Pager& getPager(const std::string& db, const std::string& table);
+
 public:
-    virtual ~Storage() = default;
+    void createDatabase(const std::string& name);
+    void dropDatabase(const std::string& name);
 
-    // Записать байты, вернуть физический адрес
-    virtual RecordId write(const std::string& db, const std::string& table,
-                           const std::vector<uint8_t>& data) = 0;
+    void createTable(const std::string& db, const std::string& table);
+    void dropTable(const std::string& db, const std::string& table);
 
-    // Прочитать байты по адресу
-    virtual std::vector<uint8_t> read(const std::string& db, const std::string& table,
-                                      RecordId id) = 0;
+    RowId write(const std::string& db, const std::string& table, const std::vector<char>& bytes);
 
-    // Полный scan: все записи таблицы (адрес + байты)
-    virtual std::vector<std::pair<RecordId, std::vector<uint8_t>>>
-        scan(const std::string& db, const std::string& table) = 0;
+    std::vector<std::pair<RowId, std::vector<char>>>
+    scan(const std::string& db, const std::string& table);
 
-    // Пометить запись удалённой
-    virtual void remove(const std::string& db, const std::string& table, RecordId id) = 0;
+    void update(const std::string& db, const std::string& table,
+                const RowId& rid, const std::vector<char>& bytes);
 
-    // Перезаписать запись (или tombstone + новая запись — на усмотрение impl)
-    virtual RecordId update(const std::string& db, const std::string& table,
-                            RecordId id, const std::vector<uint8_t>& data) = 0;
-
-    // Создать/удалить файлы таблицы
-    virtual void createTable(const std::string& db, const std::string& table) = 0;
-    virtual void dropTable  (const std::string& db, const std::string& table) = 0;
-    virtual void createDatabase(const std::string& db) = 0;
-    virtual void dropDatabase  (const std::string& db) = 0;
+    void remove(const std::string& db, const std::string& table,
+                const RowId& rid);
 };
