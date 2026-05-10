@@ -48,6 +48,13 @@ void Executor::visit(CreateTableStmt& s) {
     auto [db, table] = resolve(s.table);
     _catalog.createTable(db, table, s.columns);
     _storage.createTable(db, table);
+
+    for (const auto& col : s.columns) {
+        if (col.constraint == Constraint::INDEXED) {
+            _index.create(db, table, col.name);
+        }
+    }
+
     _result.message = "Table '" + db + "." + table + "' created.";
 }
 
@@ -55,6 +62,13 @@ void Executor::visit(DropTableStmt& s) {
     auto [db, table] = resolve(s.table);
     _catalog.dropTable(db, table);
     _storage.dropTable(db, table);
+
+    for (const auto& col : schema.columns) {
+        if (col.constraint == Constraint::INDEXED) {
+            _index.drop(db, table, col.name);
+        }
+    }
+
     _result.message = "Table '" + db + "." + table + "' dropped.";
 }
 

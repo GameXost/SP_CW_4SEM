@@ -28,6 +28,7 @@ private:
     Catalog& _catalog;
     Storage& _storage;
     std::string _current_db;
+    BTree& _index;
     ExecuteResult _result;
 
     std::pair<std::string, std::string> resolve(const TableReference& ref) const;
