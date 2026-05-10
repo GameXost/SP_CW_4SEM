@@ -10,6 +10,11 @@
 #include  <string>
 #include <variant>
 #include <optional>
+#include <vector>
+#include <cstdint>
+
+using Value = std::variant<std::monostate, int, std::string>;
+using Offset = std::size_t; // под вопросом. Для pager-lite не нужен, для full-pager нужен
 
 // Тип данных колонки
 enum class ColumnType {
@@ -24,10 +29,29 @@ enum class Constraint {
     INDEXED         // уникальное поле ну и индекс деревянный, null запрещен
 };
 
+struct Column{
+    std::string name;
+    ColumnType type;
+    Constraint constraint = Constraint::NONE;
+};
+
+struct Schema{
+    std::vector<Column> columns;
+};
+
+struct Row{
+    std::vector<Value> values;
+};
+
+struct Pointer{
+    uint32_t page_id;
+    uint16_t  slot_id;
+};
+
+using RowId = Pointer;
 // значение ячейки: null/int/string
 // monostate = null
 // по сути union, но с возможностью ничего не хранить - monostate
-using Value = std::variant<std::monostate, int, std::string>;
 
 // ссылка на таблицу из запроса, по сути просто её название
 // users    => db = пустое, table = users
