@@ -4,6 +4,17 @@
 #include <stdexcept>
 #include <unordered_map>
 
+// checker
+static void checkType(const Value& v, ColumnType t, const std::string& col) {
+    if (std::holds_alternative<std::monostate>(v)) return;
+    if (t == ColumnType::INT && !std::holds_alternative<int>(v)) {
+        throw std::runtime_error("Type mismatch: column '" + col + "' expects INT");
+    }
+    if (t == ColumnType::STRING && !std::holds_alternative<std::string>(v)) {
+        throw std::runtime_error("Type mismatch: column '" + col + "' expects STRING");
+    }
+}
+
 Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {}
 
 ExecuteResult Executor::execute(ASTNode& node) {
@@ -48,20 +59,19 @@ void Executor::visit(CreateTableStmt& s) {
     auto [db, table] = resolve(s.table);
     _catalog.createTable(db, table, s.columns);
     _storage.createTable(db, table);
-
+    
     for (const auto& col : s.columns) {
-        if (col.constraint == Constraint::INDEXED) {
-            _index.create(db, table, col.name);
-        }
-    }
+            if (col.constraint == Constraint::INDEXED) {
+                    _index.create(db, table, col.name);
+                }
+            }
 
     _result.message = "Table '" + db + "." + table + "' created.";
 }
 
 void Executor::visit(DropTableStmt& s) {
     auto [db, table] = resolve(s.table);
-    _catalog.dropTable(db, table);
-    _storage.dropTable(db, table);
+    const auto& schema = _catalog.getSchema(db, table);
 
     for (const auto& col : schema.columns) {
         if (col.constraint == Constraint::INDEXED) {
@@ -69,6 +79,8 @@ void Executor::visit(DropTableStmt& s) {
         }
     }
 
+    _catalog.dropTable(db, table);
+    _storage.dropTable(db, table);
     _result.message = "Table '" + db + "." + table + "' dropped.";
 }
 
@@ -97,9 +109,16 @@ void Executor::visit(InsertStmt& s) {
             if (is_null && col.constraint != Constraint::NONE) {
                 throw std::runtime_error("NOT_NULL/INDEXED violation: " + col.name);
             }
+            checkType(full_row[i], col.type, col.name);
         }
+        RowId rid = _storage.write(db, table, Serializer::encodeRow(full_row));
 
-        _storage.write(db, table, Serializer::encodeRow(full_row));
+        // upd indexes
+        for (size_t i = 0; i < schema.columns.size(); ++i) {
+            if (schema.columns[i].constraint == Constraint::INDEXED) {
+                _index.insert(db, table, schema.columns[i].name, full_row[i], rid);
+            }
+        }
         ++inserted;
     }
 
@@ -112,7 +131,9 @@ void Executor::visit(UpdateStmt& s) {
     const auto& schema = _catalog.getSchema(db, table);
 
     for (const auto& [col, val] : s.assignments) {
-        if (schema.indexOf(col) < 0) throw std::runtime_error("Unknown column: " + col);
+        int idx = schema.indexOf(col);
+        if (idx < 0) throw std::runtime_error("Unknown column: " + col);
+        checkType(val, schema.columns[idx].type, col);
     }
 
     auto records = _storage.scan(db, table);
@@ -123,11 +144,27 @@ void Executor::visit(UpdateStmt& s) {
         auto row_map = makeRowMap(row, schema);
         if (!matchRow(s.where.get(), row_map)) continue;
 
+        auto new_row = row;
         for (const auto& [col, val] : s.assignments) {
-            row[schema.indexOf(col)] = val;
+            new_row[schema.indexOf(col)] = val;
         }
+        
+        // снимаем ключи из индексов перед удалением
+        for (size_t i = 0; i < schema.columns.size(); ++i) {
+            if (schema.columns[i].constraint == Constraint::INDEXED) {
+                _index.erase(db, table, schema.columns[i].name, row[i]);
+            }
+        }
+        
+        // Нужно поправить:
+        // возврат нового RowId и использование далее (сейчас игнор, делается через remove + wirte)
+        _storage.update(db, table, rid, Serializer::encodeRow(new_row));
 
-        _storage.update(db, table, rid, Serializer::encodeRow(row));
+        for (size_t i = 0; i < schema.columns.size(); ++i) {
+            if (schema.columns[i].constraint == Constraint::INDEXED) {
+                _index.insert(db, table, schema.columns[i].name, new_row[i], rid);
+            }
+        }
         ++updated;
     }
 
@@ -142,8 +179,16 @@ void Executor::visit(DeleteStmt& s) {
     int deleted = 0;
 
     for (auto& [rid, bytes] : records) {
-        auto row_map = makeRowMap(Serializer::decodeRow(bytes), schema);
+        auto row = Serializer::decodeRow(bytes);
+        auto row_map = makeRowMap(row, schema);
         if (!matchRow(s.where.get(), row_map)) continue;
+
+        // снимаем ключи из индексов перед удалением
+        for (size_t i = 0; i < schema.columns.size(); ++i) {
+            if (schema.columns[i].constraint == Constraint::INDEXED) {
+                _index.erase(db, table, schema.columns[i].name, row[i]);
+            }
+        }
         _storage.remove(db, table, rid);
         ++deleted;
     }

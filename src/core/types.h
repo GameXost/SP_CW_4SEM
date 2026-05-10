@@ -45,7 +45,7 @@ struct Row{
 
 struct Pointer{
     uint32_t page_id;
-    uint16_t  slot_id;
+    uint16_t slot_id;
 };
 
 using RowId = Pointer;

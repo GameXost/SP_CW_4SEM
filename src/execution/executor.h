@@ -7,6 +7,7 @@
 #include "core/result.h"
 #include "catalog/catalog.h"
 #include "storage/storage.h"
+#include "index/index_manager.h"
 
 class Executor : public Visitor {
 public:
@@ -28,7 +29,7 @@ private:
     Catalog& _catalog;
     Storage& _storage;
     std::string _current_db;
-    BTree& _index;
+    IndexManager _index;
     ExecuteResult _result;
 
     std::pair<std::string, std::string> resolve(const TableReference& ref) const;
