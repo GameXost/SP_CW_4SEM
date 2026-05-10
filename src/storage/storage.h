@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <cstdint>
 
 #include "../core/types.h"
 
@@ -25,14 +26,14 @@ public:
     void createTable(const std::string& db, const std::string& table);
     void dropTable(const std::string& db, const std::string& table);
 
-    RowId write(const std::string& db, const std::string& table, const std::vector<char>& bytes);
+    RowId write(const std::string& db, const std::string& table, const std::vector<uint8_t>& bytes);
 
-    std::vector<std::pair<RowId, std::vector<char>>>
+    std::vector<std::pair<RowId, std::vector<uint8_t>>>
     scan(const std::string& db, const std::string& table);
 
-    void update(const std::string& db, const std::string& table,
-                const RowId& rid, const std::vector<char>& bytes);
+    RowId update(const std::string& db, const std::string& table, const RowId& rid, const std::vector<uint8_t>& bytes);
 
-    void remove(const std::string& db, const std::string& table,
-                const RowId& rid);
+    void remove(const std::string& db, const std::string& table, const RowId& rid);
+
+    ~Storage();
 };

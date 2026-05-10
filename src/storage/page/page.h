@@ -5,7 +5,7 @@
 #include "../core/types.h"
 #include <cstring>
 
-const size_t PAGE_SIZE = 4096;
+inline constexpr size_t PAGE_SIZE = 4096;
 
 struct Page {
     static const uint16_t DELETED_SLOT = 0xFFFF;
@@ -46,7 +46,7 @@ struct Page {
         *reinterpret_cast<uint16_t*>(data + sizeof(uint16_t) * 2 + slot_id * sizeof(uint16_t)) = offset;
     }
 
-    bool add_row(const char* row_data, uint16_t size, uint16_t& slot_id) {
+    bool add_row(const uint8_t* row_data, uint16_t size, uint16_t& slot_id) {
         uint16_t row_count = get_row_count();
         uint16_t free_offset = get_free_space_offset();
 
@@ -63,11 +63,12 @@ struct Page {
             return false;
         }
 
-        // ↓↓↓ ВОТ ГЛАВНЫЙ ФИКС ↓↓↓
         free_offset -= data_needed;
 
         std::memcpy(data + free_offset, &size, sizeof(uint16_t));
-        std::memcpy(data + free_offset + sizeof(uint16_t), row_data, size);
+        // ← reinterpret_cast: внутри data это char[], снаружи мы принимаем uint8_t*
+        std::memcpy(data + free_offset + sizeof(uint16_t),
+                    reinterpret_cast<const char*>(row_data), size);
 
         set_slot(row_count, free_offset);
 
@@ -80,18 +81,17 @@ struct Page {
         return true;
     }
 
-    const char* get_row(uint16_t slot_id, uint16_t& size) const {
+    const uint8_t* get_row(uint16_t slot_id, uint16_t& size) const {
         if (slot_id >= get_row_count()) return nullptr;
 
         uint16_t offset = get_slot(slot_id);
 
-    
         if (offset == DELETED_SLOT) return nullptr;
-
         if (offset >= PAGE_SIZE) return nullptr;
 
         std::memcpy(&size, data + offset, sizeof(uint16_t));
 
-        return data + offset + sizeof(uint16_t);
+        // ← reinterpret_cast: отдаём наружу как uint8_t*
+        return reinterpret_cast<const uint8_t*>(data + offset + sizeof(uint16_t));
     }
 };
