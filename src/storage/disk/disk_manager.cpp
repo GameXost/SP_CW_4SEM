@@ -1,8 +1,6 @@
 #include "disk_manager.h"
 #include <stdexcept>
 
-const size_t PAGE_SIZE = 4096;
-
 DiskManager::DiskManager(const std::string& fname)
     : filename(fname)
 {
