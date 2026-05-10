@@ -156,13 +156,11 @@ void Executor::visit(UpdateStmt& s) {
             }
         }
         
-        // Нужно поправить:
-        // возврат нового RowId и использование далее (сейчас игнор, делается через remove + wirte)
-        _storage.update(db, table, rid, Serializer::encodeRow(new_row));
+        RowId new_rid = _storage.update(db, table, rid, Serializer::encodeRow(new_row));
 
         for (size_t i = 0; i < schema.columns.size(); ++i) {
             if (schema.columns[i].constraint == Constraint::INDEXED) {
-                _index.insert(db, table, schema.columns[i].name, new_row[i], rid);
+                _index.insert(db, table, schema.columns[i].name, new_row[i], new_rid);
             }
         }
         ++updated;
