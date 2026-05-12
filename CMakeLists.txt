@@ -36,7 +36,9 @@ FetchContent_MakeAvailable(json)
 
 set(PROJECT_SOURCES
     src/main.cpp
-    # и т.д .cpp
+    src/parser/lexer.cpp
+    src/parser/ast.cpp
+    src/parser/parser.cpp
 )
 
 add_executable(prog ${PROJECT_SOURCES})

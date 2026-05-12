@@ -4,8 +4,8 @@
 
 
 #include "parser/lexer.h"
+#include "core/exceptions.h"
 #include <cctype>
-#include <stdexcept>
 #include <algorithm>
 #include <unordered_map>
 
@@ -45,11 +45,6 @@ char Lexer::current() const {
     return _input[_position];
 }
 
-char Lexer::nextPos() const {
-    if (_position + 1 >= _input.size()) return '\0';
-    return _input[_position+1];
-}
-
 void Lexer::moveNextPos() {
     if (_position < _input.size()) {
         if (current() == '\n') _line++;
@@ -58,13 +53,13 @@ void Lexer::moveNextPos() {
 }
 
 void Lexer::skipSpace() {
-    while (_position < _input.size() && std::isspace(current())) moveNextPos();
+    while (_position < _input.size() && std::isspace((unsigned char)current())) moveNextPos();
 }
 
 Token Lexer::readIdent() {
     int start_line = _line;
     std::string word;
-    while (std::isalnum(current()) || current()=='_') {
+    while (std::isalnum((unsigned char)current()) || current()=='_') {
         word += current();
         moveNextPos();
     }
@@ -79,7 +74,7 @@ Token Lexer::readIdent() {
 Token Lexer::readNumber() {
     int start_line = _line;
     std::string num;
-    while (std::isdigit(current())) {
+    while (std::isdigit((unsigned char)current())) {
         num += current();
         moveNextPos();
     }
@@ -96,7 +91,7 @@ Token Lexer::readString() {
         moveNextPos();
     }
     if (current() == '\0') {
-        throw std::runtime_error("кавычку на закрытие проебали" + std::to_string(start_line));
+        throw SyntaxError("незакрытая строка, строка " + std::to_string(start_line));
     }
     moveNextPos();
     return {TokenType::LIT_STRING, str, start_line};
@@ -113,6 +108,7 @@ Token Lexer::readOperator() {
         case ';': return {TokenType::SYM_SEMICOLON, ";", start_line};
         case '.': return {TokenType::SYM_DOT, ".", start_line};
         case '*': return {TokenType::SYM_STAR, "*", start_line};
+        case '-': return {TokenType::SYM_MINUS, "-", start_line};
         case '=':
             if (current() == '=' ) {
                 moveNextPos();
@@ -124,6 +120,7 @@ Token Lexer::readOperator() {
                 moveNextPos();
                 return {TokenType::OP_NEQ, "!=", start_line};
             }
+            throw SyntaxError(std::string("неизвестный символ '") + c + "' на строке " + std::to_string(start_line));
         case '<':
             if (current() == '=') {
                 moveNextPos();
@@ -137,7 +134,7 @@ Token Lexer::readOperator() {
             }
             return {TokenType::OP_GT, ">", start_line};
         default:
-            throw std::runtime_error(std::string("unknown symbol '") + c + "' on str: " + std::to_string(start_line));
+            throw SyntaxError(std::string("неизвестный символ '") + c + "' на строке " + std::to_string(start_line));
     }
 }
 
@@ -149,8 +146,8 @@ std::vector<Token> Lexer::tokenize() {
             tokens.push_back({TokenType::END_OF_FILE, "", _line});
             break;
         }
-        if      (std::isalpha(current()) || current() == '_') tokens.push_back(readIdent());
-        else if (std::isdigit(current())) tokens.push_back(readNumber());
+        if      (std::isalpha((unsigned char)current()) || current() == '_') tokens.push_back(readIdent());
+        else if (std::isdigit((unsigned char)current())) tokens.push_back(readNumber());
         else if ( current() == '"') tokens.push_back(readString());
         else    tokens.push_back(readOperator());
     }
