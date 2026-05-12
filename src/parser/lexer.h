@@ -23,7 +23,6 @@ private:
     int _line; // текущая строка
 
     char current() const; // возвращает текущий символ
-    char nextPos() const; // след символ, не двигает position
     void moveNextPos(); // двиг position на +1;
     void skipSpace(); // пропустить пробелы и знаки переноса\табуляции
 

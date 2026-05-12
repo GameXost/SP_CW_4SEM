@@ -51,6 +51,7 @@ enum class TokenType {
     SYM_DOT,
     SYM_STAR,
     SYM_EQ,
+    SYM_MINUS,
 
     //literals - значения
     LIT_INT,
