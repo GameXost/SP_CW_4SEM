@@ -257,16 +257,30 @@ ColumnDef Parser::parseColumnDef() {
     return def;
 }
 
-// число, строка или NULL
+// LIT_INT в int, при negative=true собирает "-N" и парсит как одно число
+int Parser::parseIntFromToken(const Token& t, bool negative) {
+    std::string s = negative ? ("-" + t.value) : t.value;
+    int result;
+    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
+    if (ec != std::errc{})
+        throw SyntaxError(
+            "Строка " + std::to_string(t.line) +
+            ": число '" + s + "' выходит за пределы int"
+        );
+    return result;
+}
+
+// число (со знаком), строка или NULL
 Value Parser::parseValue() {
+    bool negative = match(TokenType::SYM_MINUS);
     if (check(TokenType::LIT_INT)) {
         Token t = consume(TokenType::LIT_INT);
-        int result;
-        auto [ptr, ec] = std::from_chars(t.value.data(), t.value.data() + t.value.size(), result);
-        if (ec != std::errc{})
-            throw SyntaxError("Строка " + std::to_string(t.line) + ": число '" + t.value + "' выходит за пределы int");
-        return result;
+        return parseIntFromToken(t, negative);
     }
+    if (negative) throw SyntaxError(
+        "Строка " + std::to_string(current().line) +
+        ": ожидалось число после '-'"
+    );
     if (check(TokenType::LIT_STRING))
         return consume(TokenType::LIT_STRING).value;
     if (match(TokenType::K_NULL))
@@ -277,20 +291,32 @@ Value Parser::parseValue() {
     );
 }
 
-// наименьший приоритет - собирает AND/OR цепочки
+// SQL-приоритет: OR слабее AND
+// a OR b AND c   ==   a OR (b AND c)
 ExprPtr Parser::parseExpr() {
+    return parseOr();
+}
+
+ExprPtr Parser::parseOr() {
+    ExprPtr left = parseAnd();
+    while (match(TokenType::K_OR)) {
+        ExprPtr right = parseAnd();
+        auto node     = std::make_unique<LogicalExpr>();
+        node->left    = std::move(left);
+        node->oper    = LogicalOper::OR;
+        node->right   = std::move(right);
+        left          = std::move(node);
+    }
+    return left;
+}
+
+ExprPtr Parser::parseAnd() {
     ExprPtr left = parseComparison();
-
-    while (check(TokenType::K_AND) || check(TokenType::K_OR)) {
-        LogicalOper op;
-        if      (match(TokenType::K_AND)) op = LogicalOper::AND;
-        else if (match(TokenType::K_OR))  op = LogicalOper::OR;
-        else break; // недостижимо — while гарантирует AND или OR
-
+    while (match(TokenType::K_AND)) {
         ExprPtr right = parseComparison();
         auto node     = std::make_unique<LogicalExpr>();
         node->left    = std::move(left);
-        node->oper    = op;
+        node->oper    = LogicalOper::AND;
         node->right   = std::move(right);
         left          = std::move(node);
     }
@@ -349,16 +375,19 @@ ExprPtr Parser::parsePrimary() {
         return inner;
     }
 
+    bool negative = match(TokenType::SYM_MINUS);
+
     if (check(TokenType::LIT_INT)) {
-        Token t = consume(TokenType::LIT_INT);
-        int result;
-        auto [ptr, ec] = std::from_chars(t.value.data(), t.value.data() + t.value.size(), result);
-        if (ec != std::errc{})
-            throw SyntaxError("Строка " + std::to_string(t.line) + ": число '" + t.value + "' выходит за пределы int");
+        Token t     = consume(TokenType::LIT_INT);
         auto node   = std::make_unique<LiteralExpr>();
-        node->value = result;
+        node->value = parseIntFromToken(t, negative);
         return node;
     }
+
+    if (negative) throw SyntaxError(
+        "Строка " + std::to_string(current().line) +
+        ": ожидалось число после '-'"
+    );
 
     if (check(TokenType::LIT_STRING)) {
         auto node   = std::make_unique<LiteralExpr>();

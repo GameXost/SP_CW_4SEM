@@ -47,8 +47,12 @@ private:
     ColumnDef parseColumnDef(); // парсит колонку
     Value parseValue(); // парсит значение
 
-    // парсят операции по приоритетам
+    int parseIntFromToken(const Token& t, bool negate); // общий разбор LIT_INT с опциональным минусом
+
+    // парсят операции по приоритетам: OR < AND < comparison < primary
     ExprPtr parseExpr();
+    ExprPtr parseOr();
+    ExprPtr parseAnd();
     ExprPtr parseComparison();
     ExprPtr parsePrimary();
 };

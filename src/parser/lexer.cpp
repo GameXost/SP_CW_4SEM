@@ -108,6 +108,7 @@ Token Lexer::readOperator() {
         case ';': return {TokenType::SYM_SEMICOLON, ";", start_line};
         case '.': return {TokenType::SYM_DOT, ".", start_line};
         case '*': return {TokenType::SYM_STAR, "*", start_line};
+        case '-': return {TokenType::SYM_MINUS, "-", start_line};
         case '=':
             if (current() == '=' ) {
                 moveNextPos();
