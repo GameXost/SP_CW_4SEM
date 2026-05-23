@@ -1,6 +1,6 @@
-#include "storage.h"
-#include "pager/pager.h"
-#include "page/page.h"
+#include "storage/storage.h"
+#include "storage/pager/pager.h"
+#include "storage/page/page.h"
 
 #include <filesystem>
 #include <fstream>
