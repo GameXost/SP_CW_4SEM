@@ -1,0 +1,24 @@
+# нормализация line endings: в репе всегда LF, при checkout не трогать
+# перебивает core.autocrlf на всех платформах
+* text=auto eol=lf
+
+# исключения по типу
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh  text eol=lf
+
+# бинарники
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary
+*.so  binary
+*.a   binary
+*.o   binary
+*.lib binary
