@@ -1,5 +1,6 @@
-#include "storage.h"
-#include "pager/pager.h"
+#include "storage/storage.h"
+#include "storage/pager/pager.h"
+#include "storage/page/page.h"
 
 #include <filesystem>
 #include <fstream>
@@ -9,10 +10,12 @@ namespace fs = std::filesystem;
 
 Storage::~Storage() = default;
 
+// возвращает путь к файлу таблицы
 std::string Storage::table_file(const std::string& db, const std::string& table) const {
     return root + db + "/" + table + ".db";
 }
 
+// возвращает pager для таблицы, создаёт если не существует
 Pager& Storage::getPager(const std::string& db, const std::string& table) {
     std::string path = table_file(db, table);
     if (!pagers.count(path)) {
@@ -21,14 +24,17 @@ Pager& Storage::getPager(const std::string& db, const std::string& table) {
     return *pagers[path];
 }
 
+// создаёт директорию базы данных
 void Storage::createDatabase(const std::string& name) {
     fs::create_directory(root + name);
 }
 
+// удаляет директорию базы данных со всем содержимым
 void Storage::dropDatabase(const std::string& name) {
     fs::remove_all(root + name);
 }
 
+// создаёт пустой файл таблицы
 void Storage::createTable(const std::string& db, const std::string& table) {
     std::string path = table_file(db, table);
     std::ofstream file(path, std::ios::binary);
@@ -37,12 +43,15 @@ void Storage::createTable(const std::string& db, const std::string& table) {
     }
 }
 
+// удаляет файл таблицы
 void Storage::dropTable(const std::string& db, const std::string& table) {
     std::string path = table_file(db, table);
     fs::remove(path);
+    // pager держит файл открытым - erase вызывает деструктор и закрывает дескриптор
     pagers.erase(path);
 }
 
+// записывает строку на последнюю страницу, при нехватке места выделяет новую
 RowId Storage::write(const std::string& db, const std::string& table, const std::vector<uint8_t>& bytes) {
     Pager& pager = getPager(db, table);
 
@@ -54,6 +63,7 @@ RowId Storage::write(const std::string& db, const std::string& table, const std:
         page = pager.new_page();
         target_page = page->page_id;
     } else {
+        // пробуем последнюю страницу перед тем как выделять новую
         target_page = page_count - 1;
         page = pager.fetch_page(target_page);
     }
@@ -61,9 +71,11 @@ RowId Storage::write(const std::string& db, const std::string& table, const std:
     uint16_t slot_id;
 
     if (!page->add_row(bytes.data(), static_cast<uint16_t>(bytes.size()), slot_id)) {
+        // текущая страница заполнена - выделяем новую
         page = pager.new_page();
         target_page = page->page_id;
         if (!page->add_row(bytes.data(), static_cast<uint16_t>(bytes.size()), slot_id)) {
+            // строка не влезает даже в пустую страницу
             throw std::runtime_error("Row too large");
         }
     }
@@ -72,6 +84,7 @@ RowId Storage::write(const std::string& db, const std::string& table, const std:
     return RowId{target_page, slot_id};
 }
 
+// возвращает все живые строки таблицы с их RowId
 std::vector<std::pair<RowId, std::vector<uint8_t>>>
 Storage::scan(const std::string& db, const std::string& table) {
     Pager& pager = getPager(db, table);
@@ -87,22 +100,24 @@ Storage::scan(const std::string& db, const std::string& table) {
         for (uint16_t s = 0; s < row_count; ++s) {
             uint16_t size;
             const uint8_t* data = page->get_row(s, size);
-
+            // get_row возвращает nullptr для удалённых и невалидных слотов
             if (!data) continue;
 
             std::vector<uint8_t> row(data, data + size);
-            result.push_back({RowId{p, s}, row});    
+            result.push_back({RowId{p, s}, row});
         }
     }
 
     return result;
 }
 
+// помечает старый слот удалённым и записывает новые данные, возвращает новый RowId
 RowId Storage::update(const std::string& db, const std::string& table, const RowId& rid, const std::vector<uint8_t>& bytes) {
     remove(db, table, rid);
     return write(db, table, bytes);
 }
 
+// помечает слот как удалённый
 void Storage::remove(const std::string& db, const std::string& table, const RowId& rid) {
     Pager& pager = getPager(db, table);
     Page* page = pager.fetch_page(rid.page_id);

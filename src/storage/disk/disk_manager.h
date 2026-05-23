@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cstdint>
 
+// прямой доступ к файлу на уровне страниц, без кеширования
 class DiskManager {
 private:
     std::fstream file;
@@ -16,5 +17,6 @@ public:
     void read_page(uint32_t page_id, char* data);
     void write_page(uint32_t page_id, const char* data);
 
+    // считает страницы по размеру файла
     uint32_t get_page_count();
 };
