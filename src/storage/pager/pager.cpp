@@ -1,4 +1,4 @@
-#include "pager.h"
+#include "../pager/pager.h"
 
 Pager::Pager(const std::string& filename)
     : disk(filename) {
