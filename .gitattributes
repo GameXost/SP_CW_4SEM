@@ -1,5 +1,4 @@
-# нормализация line endings: в репе всегда LF, при checkout не трогать
-# перебивает core.autocrlf на всех платформах
+# всегда LF
 * text=auto eol=lf
 
 # исключения по типу
