@@ -1,5 +1,5 @@
-#include "../disk/disk_manager.h"
-#include "../page/page.h"
+#include "disk_manager.h"
+#include "page/page.h"
 #include <stdexcept>
 
 DiskManager::DiskManager(const std::string& fname)

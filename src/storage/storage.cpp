@@ -1,4 +1,4 @@
-#include "../storage/storage.h"
+#include "storage.h"
 #include "pager/pager.h"
 
 #include <filesystem>

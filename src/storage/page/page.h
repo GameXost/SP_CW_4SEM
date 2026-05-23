@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <cstdint>
-#include "../core/types.h"
+#include "core/types.h"
 #include <cstring>
 
 inline constexpr size_t PAGE_SIZE = 4096;

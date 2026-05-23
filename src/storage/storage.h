@@ -6,7 +6,7 @@
 #include <memory>
 #include <cstdint>
 
-#include "../core/types.h"
+#include "core/types.h"
 
 class Pager;
 

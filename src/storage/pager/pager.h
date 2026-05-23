@@ -2,8 +2,8 @@
 
 #include <unordered_map>
 #include <cstdint>
-#include "../page/page.h"
-#include "../disk/disk_manager.h"
+#include "page/page.h"
+#include "disk/disk_manager.h"
 
 class Pager {
 private:
