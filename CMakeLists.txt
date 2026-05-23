@@ -36,9 +36,18 @@ FetchContent_MakeAvailable(json)
 
 set(PROJECT_SOURCES
     src/main.cpp
-    src/parser/lexer.cpp
     src/parser/ast.cpp
     src/parser/parser.cpp
+    src/parser/lexer.cpp
+    src/parser/ast.cpp
+    
+    src/execution/executor.cpp
+    src/execution/serializer.cpp
+    
+    src/storage/storage.cpp
+    src/storage/disk/disk_manager.cpp
+    src/storage/pager/pager.cpp
+
 )
 
 add_executable(prog ${PROJECT_SOURCES})
