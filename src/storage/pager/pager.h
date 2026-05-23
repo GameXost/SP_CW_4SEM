@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 #include <cstdint>
-#include "../pager/page.h"
+#include "../page/page.h"
 #include "disk_manager.h"
 
 class Pager {
