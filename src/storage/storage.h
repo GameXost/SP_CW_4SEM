@@ -14,6 +14,7 @@ class Storage {
 private:
     std::string root = "./data/";
 
+    // ключ — путь к файлу таблицы
     std::unordered_map<std::string, std::unique_ptr<Pager>> pagers;
 
     std::string table_file(const std::string& db, const std::string& table) const;
@@ -31,6 +32,7 @@ public:
     std::vector<std::pair<RowId, std::vector<uint8_t>>>
     scan(const std::string& db, const std::string& table);
 
+    // возвращает новый RowId — после update старый невалиден
     RowId update(const std::string& db, const std::string& table, const RowId& rid, const std::vector<uint8_t>& bytes);
 
     void remove(const std::string& db, const std::string& table, const RowId& rid);
