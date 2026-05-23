@@ -1,6 +1,6 @@
 #pragma once
-#include "parser/ast.h"
-#include "core/types.h"
+#include "../parser/ast.h"
+#include "../core/types.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>

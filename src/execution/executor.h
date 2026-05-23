@@ -3,11 +3,11 @@
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
-#include "parser/ast.h"
-#include "core/result.h"
-#include "catalog/catalog.h"
-#include "storage/storage.h"
-#include "index/index_manager.h"
+#include "../parser/ast.h"
+#include "../core/result.h"
+#include "../catalog/catalog.h"
+#include "../storage/storage.h"
+#include "../index/index_manager.h"
 
 class Executor : public Visitor {
 public:

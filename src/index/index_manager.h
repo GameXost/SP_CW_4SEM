@@ -2,7 +2,7 @@
 #define CW_INDEX_MANAGER_H
 
 #include <string>
-#include "core/types.h"
+#include "../core/types.h"
 
 class IndexManager {
 public:
