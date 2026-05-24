@@ -49,6 +49,10 @@ set(PROJECT_SOURCES
     src/storage/disk/disk_manager.cpp
     src/storage/pager/pager.cpp
 
+    src/index/btree_helpers.cpp
+    src/index/btree_insert_split.cpp
+    src/index/btree_erase_merge.cpp
+    src/index/index_manager.cpp
 )
 
 add_executable(prog ${PROJECT_SOURCES})
