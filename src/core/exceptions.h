@@ -11,6 +11,10 @@
 struct SyntaxError : std::runtime_error {
     explicit SyntaxError(const std::string& m) : std::runtime_error(m) {}
 };
+// незакрытый строковый литерал (исп. как флаг)
+struct IncompleteInput : std::runtime_error {
+    explicit IncompleteInput(const std::string& m) : std::runtime_error(m) {}
+};
 struct SemanticError : std::runtime_error {
     explicit SemanticError(const std::string& m) : std::runtime_error(m) {}
 };

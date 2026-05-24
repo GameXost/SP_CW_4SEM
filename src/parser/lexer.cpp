@@ -52,8 +52,20 @@ void Lexer::moveNextPos() {
     }
 }
 
-void Lexer::skipSpace() {
-    while (_position < _input.size() && std::isspace((unsigned char)current())) moveNextPos();
+void Lexer::skipSpaceAndComments() {
+    while (_position < _input.size()) {
+        char c = current();
+        if (std::isspace((unsigned char)c)) {
+            moveNextPos();
+            continue;
+        }
+        // -- комментарий до конца строки
+        if (c == '-' && _position + 1 < _input.size() && _input[_position + 1] == '-') {
+            while (current() != '\n' && current() != '\0') moveNextPos();
+            continue;
+        }
+        break;
+    }
 }
 
 Token Lexer::readIdent() {
@@ -66,7 +78,15 @@ Token Lexer::readIdent() {
     std::string upper = word;
     std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
     auto lit = KEYWORDS.find(upper);
-    if (lit != KEYWORDS.end()) return {lit->second, word, start_line};
+    if (lit != KEYWORDS.end()) {
+        // ключевые слова в одном регистре только: SELECT & select
+        std::string lower = word;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        if (word != upper && word != lower)
+            throw SyntaxError("строка " + std::to_string(start_line) +
+                              ": смешение регистров в ключевом слове '" + word + "'");
+        return {lit->second, word, start_line};
+    }
     return {TokenType::IDENT, word, start_line};
 }
 
@@ -91,7 +111,8 @@ Token Lexer::readString() {
         moveNextPos();
     }
     if (current() == '\0') {
-        throw SyntaxError("незакрытая строка, строка " + std::to_string(start_line));
+        // продолжение на некст строке возможно
+        throw IncompleteInput("незакрытая строка, строка " + std::to_string(start_line));
     }
     moveNextPos();
     return {TokenType::LIT_STRING, str, start_line};
@@ -141,7 +162,7 @@ Token Lexer::readOperator() {
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
     while (true) {
-        skipSpace();
+        skipSpaceAndComments();
         if (current() == '\0') {
             tokens.push_back({TokenType::END_OF_FILE, "", _line});
             break;

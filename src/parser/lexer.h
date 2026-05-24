@@ -24,7 +24,7 @@ private:
 
     char current() const; // возвращает текущий символ
     void moveNextPos(); // двиг position на +1;
-    void skipSpace(); // пропустить пробелы и знаки переноса\табуляции
+    void skipSpaceAndComments(); // пропустить пробелы, переносы и комментарии -- до конца строки
 
     Token readIdent(); // чтение целого слова keyword/ident
     Token readNumber(); // чтение цифры - LIT_INT
