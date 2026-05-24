@@ -18,12 +18,11 @@ public:
 
     bool erase(const Value& key);
 
+    static int compareValues(const Value& a, const Value& b);
 private:
     NodeStore& _store;
 
     uint32_t findLeaf(const Value& key);
-
-    static int compareValues(const Value& a, const Value& b);
 
     static int findChildIndex(const BTreeNode& parent, uint32_t child_page_id);
 
