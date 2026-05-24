@@ -8,10 +8,6 @@
 #include <cctype>
 #include <filesystem>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 #include "parser/lexer.h"
 #include "parser/parser.h"
 #include "catalog/catalog.h"
@@ -20,14 +16,7 @@
 #include "execution/executor.h"
 #include "core/result.h"
 #include "core/exceptions.h"
-
-// utf-8 в консоли windows, иначе кириллица в выводе и вводе ломается
-static void setupConsole() {
-#ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-#endif
-}
+#include "platform/console.h"
 
 static void stripBom(std::string& s) {
     if (s.size() >= 3 &&
