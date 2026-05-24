@@ -32,6 +32,9 @@ public:
     std::vector<std::pair<RowId, std::vector<uint8_t>>>
     scan(const std::string& db, const std::string& table);
 
+    // чтение одной строки по RowId, {} если слот удалён или невалиден
+    std::vector<uint8_t> read(const std::string& db, const std::string& table, const RowId& rid);
+
     // возвращает новый RowId — после update старый невалиден
     RowId update(const std::string& db, const std::string& table, const RowId& rid, const std::vector<uint8_t>& bytes);
 

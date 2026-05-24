@@ -110,6 +110,11 @@ void Executor::visit(InsertStmt& s) {
                 throw std::runtime_error("NOT_NULL/INDEXED violation: " + col.name);
             }
             checkType(full_row[i], col.type, col.name);
+            // проверка уникальности до записи
+            if (col.constraint == Constraint::INDEXED &&
+                _index.find(db, table, col.name, full_row[i]).has_value()) {
+                throw std::runtime_error("Unique violation: column '" + col.name + "'");
+            }
         }
         RowId rid = _storage.write(db, table, Serializer::encodeRow(full_row));
 
@@ -148,7 +153,17 @@ void Executor::visit(UpdateStmt& s) {
         for (const auto& [col, val] : s.assignments) {
             new_row[schema.indexOf(col)] = val;
         }
-        
+
+        // уникальность проверяем до изменения (старый ключ в индексе, поэтому self не совпадет)
+        for (const auto& [col, val] : s.assignments) {
+            int ci = schema.indexOf(col);
+            if (schema.columns[ci].constraint == Constraint::INDEXED &&
+                BTree::compareValues(val, row[ci]) != 0 &&
+                _index.find(db, table, col, val).has_value()) {
+                throw std::runtime_error("Unique violation: column '" + col + "'");
+            }
+        }
+
         // снимаем ключи из индексов перед удалением
         for (size_t i = 0; i < schema.columns.size(); ++i) {
             if (schema.columns[i].constraint == Constraint::INDEXED) {
@@ -194,6 +209,25 @@ void Executor::visit(DeleteStmt& s) {
     _result.message = "Deleted " + std::to_string(deleted) + " row(s).";
 }
 
+// распознаёт WHERE вида (col == литерал) / (литерал == col) на INDEXED-колонке
+static std::optional<std::pair<std::string, Value>>
+indexedEquality(const ExprNode* where, const TableSchema& schema) {
+    const auto* bin = dynamic_cast<const BinaryExpr*>(where);
+    if (!bin || bin->oper != BinaryOper::EQ) return std::nullopt;
+
+    const auto* col = dynamic_cast<const ColumnRefExpr*>(bin->left.get());
+    const auto* lit = dynamic_cast<const LiteralExpr*>(bin->right.get());
+    if (!col || !lit) {
+        col = dynamic_cast<const ColumnRefExpr*>(bin->right.get());
+        lit = dynamic_cast<const LiteralExpr*>(bin->left.get());
+    }
+    if (!col || !lit) return std::nullopt;
+
+    int ci = schema.indexOf(col->name);
+    if (ci < 0 || schema.columns[ci].constraint != Constraint::INDEXED) return std::nullopt;
+    return std::make_pair(col->name, lit->value);
+}
+
 // SELECT
 void Executor::visit(SelectStmt& s) {
     auto [db, table] = resolve(s.table);
@@ -211,7 +245,23 @@ void Executor::visit(SelectStmt& s) {
         aliases[sc.name] = sc.alias.value_or(sc.name);
     }
 
-    auto records = _storage.scan(db, table);
+    // путь по индексу для (INDEXED-колонка == литерал)
+    // если индекс ничего не вернул - используется полный scan
+    std::vector<std::pair<RowId, std::vector<uint8_t>>> records;
+    bool used_index = false;
+    if (auto hit = indexedEquality(s.where.get(), schema)) {
+        if (auto rid = _index.find(db, table, hit->first, hit->second)) {
+            auto bytes = _storage.read(db, table, *rid);
+            if (!bytes.empty()) {
+                records.push_back({*rid, bytes});
+                used_index = true;
+            }
+        }
+    }
+    if (!used_index) {
+        records = _storage.scan(db, table);
+    }
+
     nlohmann::json result = nlohmann::json::array();
 
     for (auto& [rid, bytes] : records) {

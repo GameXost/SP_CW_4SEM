@@ -111,6 +111,18 @@ Storage::scan(const std::string& db, const std::string& table) {
     return result;
 }
 
+// читает одну строку по RowId (пусто если слот удалён или вне диапазона)
+std::vector<uint8_t> Storage::read(const std::string& db, const std::string& table, const RowId& rid) {
+    Pager& pager = getPager(db, table);
+    if (rid.page_id >= pager.get_page_count()) return {};
+
+    Page* page = pager.fetch_page(rid.page_id);
+    uint16_t size;
+    const uint8_t* data = page->get_row(rid.slot_id, size);
+    if (!data) return {};
+    return std::vector<uint8_t>(data, data + size);
+}
+
 // помечает старый слот удалённым и записывает новые данные, возвращает новый RowId
 RowId Storage::update(const std::string& db, const std::string& table, const RowId& rid, const std::vector<uint8_t>& bytes) {
     remove(db, table, rid);
