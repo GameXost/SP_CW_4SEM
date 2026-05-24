@@ -26,12 +26,6 @@ private:
 
     static int findChildIndex(const BTreeNode& parent, uint32_t child_page_id);
 
-    static void leafInsertAt(BTreeNode& node, uint16_t pos, const Value& key, RowId rid);
-
-    static void internalInsertAt(BTreeNode& node, uint16_t pos, const Value& key, uint32_t right_id);
-
-    static uint16_t lowerBound(const std::vector<Value>& keys, uint16_t count, const Value& key);
-
     void redistributeOrSplitLeaf(uint32_t leaf_id);
 
     void redistributeOrSplitInternal(uint32_t node_id);
