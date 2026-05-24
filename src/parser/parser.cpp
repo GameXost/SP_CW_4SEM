@@ -29,12 +29,15 @@ bool Parser::check(TokenType type) {
 }
 
 // проверяет тип, сдвигается вперёд, при несовпадении - ошибка
-Token Parser::consume(TokenType expected) {
+Token Parser::consume(TokenType expected, const char* what) {
     if (!check(expected)) {
+        // у END_OF_FILE и прочих служебных value пустой - показываем имя типа
+        std::string found = current().value.empty() ? tokenName(current().type) : current().value;
+        std::string exp = what ? what : tokenName(expected);
         throw SyntaxError(
             "Строка " + std::to_string(current().line) +
-            ": ожидался токен " + std::to_string(static_cast<int>(expected)) +
-            ", найден '" + current().value + "'"
+            ": ожидается " + exp +
+            ", найдено '" + found + "'"
         );
     }
     Token token = current();
@@ -99,21 +102,21 @@ ASTNodePtr Parser::parseDrop() {
 ASTNodePtr Parser::parseCreateDatabase() {
     consume(TokenType::K_DATABASE);
     auto node  = std::make_unique<CreateDatabaseStmt>();
-    node->name = consume(TokenType::IDENT).value;
+    node->name = consume(TokenType::IDENT, "имя базы данных").value;
     return node;
 }
 
 ASTNodePtr Parser::parseDropDatabase() {
     consume(TokenType::K_DATABASE);
     auto node  = std::make_unique<DropDatabaseStmt>();
-    node->name = consume(TokenType::IDENT).value;
+    node->name = consume(TokenType::IDENT, "имя базы данных").value;
     return node;
 }
 
 ASTNodePtr Parser::parseUse() {
     consume(TokenType::K_USE);
     auto node  = std::make_unique<UseStmt>();
-    node->name = consume(TokenType::IDENT).value;
+    node->name = consume(TokenType::IDENT, "имя базы данных").value;
     return node;
 }
 
@@ -145,9 +148,9 @@ ASTNodePtr Parser::parseInsert() {
     node->table = parseTableRef();
 
     consume(TokenType::SYM_LPAREN);
-    node->columns.push_back(consume(TokenType::IDENT).value);
+    node->columns.push_back(consume(TokenType::IDENT, "имя колонки").value);
     while (match(TokenType::SYM_COMMA))
-        node->columns.push_back(consume(TokenType::IDENT).value);
+        node->columns.push_back(consume(TokenType::IDENT, "имя колонки").value);
     consume(TokenType::SYM_RPAREN);
 
     consume(TokenType::K_VALUE);
@@ -178,7 +181,7 @@ ASTNodePtr Parser::parseUpdate() {
     consume(TokenType::K_SET);
 
     auto parseAssignment = [&]() {
-        std::string col = consume(TokenType::IDENT).value;
+        std::string col = consume(TokenType::IDENT, "имя колонки").value;
         consume(TokenType::SYM_EQ); // одиночный = для присваивания, не ==
         return std::make_pair(col, parseValue());
     };
@@ -211,10 +214,10 @@ ASTNodePtr Parser::parseSelect() {
         // SELECT col [AS alias], ...
         auto parseCol = [&]() {
             SelectColumn sc;
-            sc.name  = consume(TokenType::IDENT).value;
+            sc.name  = consume(TokenType::IDENT, "имя колонки").value;
             sc.alias = std::nullopt;
             if (match(TokenType::K_AS))
-                sc.alias = consume(TokenType::IDENT).value;
+                sc.alias = consume(TokenType::IDENT, "имя алиаса").value;
             return sc;
         };
         node->columns.push_back(parseCol());
@@ -230,9 +233,9 @@ ASTNodePtr Parser::parseSelect() {
 
 // парсит table или db.table
 TableReference Parser::parseTableRef() {
-    Token first = consume(TokenType::IDENT);
+    Token first = consume(TokenType::IDENT, "имя таблицы");
     if (match(TokenType::SYM_DOT)) {
-        Token second = consume(TokenType::IDENT);
+        Token second = consume(TokenType::IDENT, "имя таблицы");
         return TableReference{ first.value, second.value };
     }
     return TableReference{ std::nullopt, first.value };
@@ -241,7 +244,7 @@ TableReference Parser::parseTableRef() {
 // имя колонки + тип (INT/STRING) + опциональный constraint
 ColumnDef Parser::parseColumnDef() {
     ColumnDef def;
-    def.name = consume(TokenType::IDENT).value;
+    def.name = consume(TokenType::IDENT, "имя колонки").value;
 
     if      (match(TokenType::K_INT))    def.type = ColumnType::INT;
     else if (match(TokenType::K_STRING)) def.type = ColumnType::STRING;
@@ -291,9 +294,22 @@ Value Parser::parseValue() {
     );
 }
 
+// счетчик глубины: ++ на входе в parseExpr и -- при выходе
+namespace {
+struct DepthGuard {
+    int& d;
+    explicit DepthGuard(int& depth) : d(depth) { ++d; }
+    ~DepthGuard() { --d; }
+};
+}
+
 // SQL-приоритет: OR слабее AND
 // a OR b AND c   ==   a OR (b AND c)
 ExprPtr Parser::parseExpr() {
+    // каждый уровень скобок заходит сюда заново через parsePrimary - ловим переполнение стека
+    DepthGuard guard(_depth);
+    if (_depth > MAX_EXPR_DEPTH)
+        throw SyntaxError("слишком глубоко вложенное выражение");
     return parseOr();
 }
 
@@ -409,6 +425,6 @@ ExprPtr Parser::parsePrimary() {
 
     throw SyntaxError(
         "Строка " + std::to_string(current().line) +
-        ": ожидалось выражение (идентификатор, число, строка, NULL или '(')"
+        ": ожидалось выражение (имя колонки, число, строка, NULL или '(')"
     );
 }

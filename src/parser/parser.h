@@ -17,11 +17,14 @@ public:
 private:
     std::vector<Token> _vector;
     size_t _position = 0;
+    // ограничение глубины вложенности выражений
+    int _depth = 0;
+    static constexpr int MAX_EXPR_DEPTH = 200;
 
 
     Token &current(); // возвращает текущий токен, без сдвига
     Token &peek(size_t offset = 1); // возвращает токен с определенным смещением, не двигаем позицию
-    Token consume(TokenType expected); // обработка токена, ожидаемый == полученный, то двигаемся дальше, нет - ошибка
+    Token consume(TokenType expected, const char* what = nullptr); // what - человекочитаемое описание для ошибки
     bool match(TokenType type); // менее строгая проверка токена для необязательных частей, со сдвигом
 
     // общие обработчики, распределяют по уровням выражений

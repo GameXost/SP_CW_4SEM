@@ -19,8 +19,26 @@
 #include "storage/pager/pager.h"
 #include "execution/executor.h"
 #include "core/result.h"
+#include "core/exceptions.h"
 
-// поиск ";" вне строкового литерала. внутри "..." точка с запятой - часть данных
+// utf-8 в консоли windows, иначе кириллица в выводе и вводе ломается
+static void setupConsole() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+}
+
+static void stripBom(std::string& s) {
+    if (s.size() >= 3 &&
+        (unsigned char)s[0] == 0xEF &&
+        (unsigned char)s[1] == 0xBB &&
+        (unsigned char)s[2] == 0xBF) {
+        s.erase(0, 3);
+    }
+}
+
+// поиск ";" вне строкового литерала и вне -- комментария
 static size_t findSemicolon(const std::string& buf) {
     bool in_string = false;
     for (size_t i = 0; i < buf.size(); ++i) {
@@ -29,6 +47,8 @@ static size_t findSemicolon(const std::string& buf) {
             if (c == '"') in_string = false;
         } else if (c == '"') {
             in_string = true;
+        } else if (c == '-' && i + 1 < buf.size() && buf[i + 1] == '-') {
+            while (i < buf.size() && buf[i] != '\n') ++i;
         } else if (c == ';') {
             return i;
         }
@@ -65,15 +85,19 @@ static void runQuery(const std::string& sql, Executor& exec) {
     }
 }
 
-// читает поток построчно, копит в буфер до ;, отдаёт запрос за запросом
+// читает поток построчно, копит в буфер до ";", отдаёт запрос за запросом
 static void runStream(std::istream& in, Executor& exec, bool interactive) {
     std::string buffer;
     std::string line;
+    bool first_line = true;
     while (true) {
-        if (interactive) std::cout << "SQL> " << std::flush;
+        // SQL> - новый запрос, -> продолжение текущего
+        if (interactive) std::cout << (buffer.empty() ? "SQL> " : "  -> ") << std::flush;
         if (!std::getline(in, line)) break;
 
-        // выход в интерактивном режиме
+        if (first_line) { stripBom(line); first_line = false; }
+
+        // выход в интеграктивном режиме
         if (interactive && (line == "exit" || line == "quit")) break;
 
         if (!buffer.empty()) buffer += '\n';
@@ -90,10 +114,30 @@ static void runStream(std::istream& in, Executor& exec, bool interactive) {
             }
             pos = findSemicolon(buffer);
         }
+        // сбрасываем буфер каждый раз
+        if (isBlank(buffer)) buffer.clear();
+
+        // невалидный символ - выброс ошибки после переноса строка
+        if (interactive && !buffer.empty()) {
+            try {
+                Lexer(buffer).tokenize();
+            } catch (const IncompleteInput&) {
+                // "" не закрыты, ожидаение закрытия
+            } catch (const std::exception& e) {
+                std::cout << "Error: " << e.what() << '\n';
+                buffer.clear();
+            }
+        }
+    }
+
+    if (!isBlank(buffer)) {
+        std::cout << "Error: incomplete statement (missing ';'): " << buffer << '\n';
     }
 }
 
 int main(int argc, char** argv) {
+    setupConsole();
+
     if (argc > 2) {
         std::cerr << "Usage: prog [script.sql]\n";
         return 1;
@@ -115,6 +159,7 @@ int main(int argc, char** argv) {
             }
             runStream(file, executor, false);
         } else {
+            std::cout << "mini-db ready. end statements with ';'. type 'exit' or Ctrl+D to quit.\n";
             runStream(std::cin, executor, true);
         }
     } catch (const std::exception& e) {
