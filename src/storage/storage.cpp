@@ -31,6 +31,14 @@ void Storage::createDatabase(const std::string& name) {
 
 // удаляет директорию базы данных со всем содержимым
 void Storage::dropDatabase(const std::string& name) {
+    // pager держит файлы открытыми - закрываем все по этой бд до удаления
+    std::string prefix = root + name + "/";
+    for (auto it = pagers.begin(); it != pagers.end();) {
+        if (it->first.rfind(prefix, 0) == 0)
+            it = pagers.erase(it);
+        else
+            ++it;
+    }
     fs::remove_all(root + name);
 }
 
@@ -46,9 +54,9 @@ void Storage::createTable(const std::string& db, const std::string& table) {
 // удаляет файл таблицы
 void Storage::dropTable(const std::string& db, const std::string& table) {
     std::string path = table_file(db, table);
-    fs::remove(path);
-    // pager держит файл открытым - erase вызывает деструктор и закрывает дескриптор
+    // pager держит файл открытым - закрываем дескриптор до удаления
     pagers.erase(path);
+    fs::remove(path);
 }
 
 // записывает строку на последнюю страницу, при нехватке места выделяет новую
