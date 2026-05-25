@@ -15,7 +15,37 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
     }
 }
 
-Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {}
+Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {
+    rebuildIndexes();
+}
+
+// индекс держится только в памяти - при старте отстраиваем его заново из данных таблиц
+void Executor::rebuildIndexes() {
+    for (const auto& [db, tables] : _catalog.databases()) {
+        for (const auto& [table, schema] : tables) {
+            bool has_index = false;
+            for (const auto& col : schema.columns) {
+                if (col.constraint == Constraint::INDEXED) {
+                    _index.create(db, table, col.name);
+                    has_index = true;
+                }
+            }
+            if (!has_index) continue;
+
+            for (auto& [rid, bytes] : _storage.scan(db, table)) {
+                auto row = Serializer::decodeRow(bytes);
+                for (size_t i = 0; i < schema.columns.size() && i < row.size(); ++i) {
+                    if (schema.columns[i].constraint != Constraint::INDEXED) continue;
+                    // дубликаты в старых данных не должны валить старт
+                    try {
+                        _index.insert(db, table, schema.columns[i].name, row[i], rid);
+                    } catch (...) {
+                    }
+                }
+            }
+        }
+    }
+}
 
 ExecuteResult Executor::execute(ASTNode& node) {
     _result = {};
@@ -37,7 +67,13 @@ std::pair<std::string, std::string> Executor::resolve(const TableReference& ref)
 // DDL db
 void Executor::visit(CreateDatabaseStmt& s) {
     _catalog.createDatabase(s.name);
-    _storage.createDatabase(s.name);
+    try {
+        _storage.createDatabase(s.name);
+    } catch (...) {
+        // каталог не должен ссылаться на несозданную бд
+        _catalog.dropDatabase(s.name);
+        throw;
+    }
     _result.message = "Database '" + s.name + "' created.";
 }
 
@@ -58,13 +94,18 @@ void Executor::visit(UseStmt& s) {
 void Executor::visit(CreateTableStmt& s) {
     auto [db, table] = resolve(s.table);
     _catalog.createTable(db, table, s.columns);
-    _storage.createTable(db, table);
-    
-    for (const auto& col : s.columns) {
+    try {
+        _storage.createTable(db, table);
+        for (const auto& col : s.columns) {
             if (col.constraint == Constraint::INDEXED) {
-                    _index.create(db, table, col.name);
-                }
+                _index.create(db, table, col.name);
             }
+        }
+    } catch (...) {
+        // каталог не должен ссылаться на несозданную таблицу
+        _catalog.dropTable(db, table);
+        throw;
+    }
 
     _result.message = "Table '" + db + "." + table + "' created.";
 }
@@ -417,19 +458,26 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
         Value lo = evalExpr(bet->low.get(), row);
         Value hi = evalExpr(bet->high.get(), row);
 
-        if (std::holds_alternative<int>(val)) {
-            int v = std::get<int>(val);
-            int l = std::get<int>(lo);
-            int h = std::get<int>(hi);
+        // NULL в любой из частей - условие неопределено, считаем ложным
+        if (std::holds_alternative<std::monostate>(val) ||
+            std::holds_alternative<std::monostate>(lo) ||
+            std::holds_alternative<std::monostate>(hi))
+            return 0;
+
+        // интервал [lo, hi) по ТЗ - верхняя граница исключается
+        if (std::holds_alternative<int>(val) &&
+            std::holds_alternative<int>(lo) && std::holds_alternative<int>(hi)) {
+            int v = std::get<int>(val), l = std::get<int>(lo), h = std::get<int>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
-        if (std::holds_alternative<std::string>(val)) {
+        if (std::holds_alternative<std::string>(val) &&
+            std::holds_alternative<std::string>(lo) && std::holds_alternative<std::string>(hi)) {
             const auto& v = std::get<std::string>(val);
             const auto& l = std::get<std::string>(lo);
             const auto& h = std::get<std::string>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
-        return 0;
+        throw std::runtime_error("Type mismatch in BETWEEN");
     }
 
     if (const auto* like = dynamic_cast<const LikeExpr*>(expr)) {

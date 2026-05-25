@@ -34,6 +34,9 @@ private:
 
     std::pair<std::string, std::string> resolve(const TableReference& ref) const;
 
+    // восстанавливает индексы из данных при старте (MemNodeStore не персистится)
+    void rebuildIndexes();
+
     Value evalExpr(const ExprNode* expr, const std::unordered_map<std::string, Value>& row) const;
 
     bool matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const;
