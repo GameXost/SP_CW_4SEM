@@ -42,7 +42,7 @@ public:
                         if (std::holds_alternative<int>(*col.default_value))
                             cj["default"] = std::get<int>(*col.default_value);
                         else
-                            cj["default"] = std::get<std::string>(*col.default_value);
+                            cj["default"] = std::string(std::get<std::string_view>(*col.default_value));
                     }
                     cols_json.push_back(cj);
                 }
