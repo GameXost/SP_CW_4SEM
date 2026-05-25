@@ -32,11 +32,19 @@ public:
             for (const auto& [tname, schema] : tables) {
                 nlohmann::json cols_json;
                 for (const auto& col : schema.columns) {
-                    cols_json.push_back({
+                    nlohmann::json cj = {
                         {"name", col.name},
                         {"type", (int)col.type},
                         {"constraint", (int)col.constraint}
-                    });
+                    };
+                    // DEFAULT ставим только если задан и не NULL; тип известен из колонки
+                    if (col.default_value && !std::holds_alternative<std::monostate>(*col.default_value)) {
+                        if (std::holds_alternative<int>(*col.default_value))
+                            cj["default"] = std::get<int>(*col.default_value);
+                        else
+                            cj["default"] = std::get<std::string>(*col.default_value);
+                    }
+                    cols_json.push_back(cj);
                 }
                 db_json[tname] = cols_json;
             }
@@ -120,11 +128,18 @@ private:
             for (const auto& [tname, cols_json] : tables.items()) {
                 std::vector<ColumnDef> cols;
                 for (const auto& c : cols_json) {
-                    cols.push_back({
+                    ColumnDef cd{
                         c["name"].get<std::string>(),
                         (ColumnType)c["type"].get<int>(),
-                        (Constraint)c["constraint"].get<int>()
-                    });
+                        (Constraint)c["constraint"].get<int>(),
+                        std::nullopt
+                    };
+                    // старый catalog.json без "default" -> остаётся nullopt
+                    if (c.contains("default")) {
+                        if (cd.type == ColumnType::INT) cd.default_value = c["default"].get<int>();
+                        else cd.default_value = c["default"].get<std::string>();
+                    }
+                    cols.push_back(cd);
                 }
                 _dbs[db][tname] = TableSchema{db, tname, cols};
             }

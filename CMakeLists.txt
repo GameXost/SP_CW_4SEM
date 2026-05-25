@@ -53,6 +53,9 @@ set(PROJECT_SOURCES
     src/index/btree_insert_split.cpp
     src/index/btree_erase_merge.cpp
     src/index/index_manager.cpp
+
+    src/execution/logger.cpp
+    src/core/metrics.cpp
 )
 
 add_executable(prog ${PROJECT_SOURCES})

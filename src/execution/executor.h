@@ -8,12 +8,14 @@
 #include "catalog/catalog.h"
 #include "storage/storage.h"
 #include "index/index_manager.h"
+#include "execution/logger.h"
+#include "core/metrics.h"
 
 class Executor : public Visitor {
 public:
     Executor(Catalog& catalog, Storage& storage);
 
-    ExecuteResult execute(ASTNode& node);
+    ExecuteResult execute(ASTNode& node, const std::string& query = "", int64_t client_id = 0);
 
     void visit(CreateDatabaseStmt&) override;
     void visit(DropDatabaseStmt&) override;
@@ -25,12 +27,16 @@ public:
     void visit(DeleteStmt&) override;
     void visit(SelectStmt&) override;
 
+    const Metrics& metrics() const { return _metrics; }
+
 private:
     Catalog& _catalog;
     Storage& _storage;
     std::string _current_db;
     IndexManager _index;
     ExecuteResult _result;
+    Logger _logger;
+    Metrics _metrics;
 
     std::pair<std::string, std::string> resolve(const TableReference& ref) const;
 

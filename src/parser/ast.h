@@ -29,12 +29,18 @@ struct ColumnDef {
     std::string name;
     ColumnType type;
     Constraint constraint;
+    std::optional<Value> default_value;   // nullopt = нет DEFAULT
 };
 
+// агрегатная функция над колонкой в SELECT
+enum class AggFunc { NONE, SUM, COUNT, AVG };
+
 // одна колонка в SELECT
-// SELECT name, age .... - два два SelectToColumn
+// SELECT name, age .... - два SelectColumn
 // SELECT *  - columns пустой вектор
+// agg != NONE -> это SUM(name)/COUNT(name)/AVG(name)
 struct SelectColumn {
+    AggFunc agg = AggFunc::NONE;
     std::string name;
     std::optional<std::string> alias;
 };

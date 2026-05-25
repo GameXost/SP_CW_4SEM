@@ -35,6 +35,10 @@ static const std::unordered_map<std::string, TokenType> KEYWORDS = {
     {"NULL",     TokenType::K_NULL},
     {"INT",      TokenType::K_INT},
     {"STRING",   TokenType::K_STRING},
+    {"SUM",      TokenType::K_SUM},
+    {"COUNT",    TokenType::K_COUNT},
+    {"AVG",      TokenType::K_AVG},
+    {"DEFAULT",  TokenType::K_DEFAULT},
 };
 
 Lexer::Lexer(const std::string &input)
