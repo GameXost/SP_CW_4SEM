@@ -4,6 +4,7 @@
 
 #include "parser/parser.h"
 #include "core/exceptions.h"
+#include "core/string_pool.h"
 #include <charconv>
 
 Parser::Parser(std::vector<Token> tokens)
@@ -214,19 +215,7 @@ ASTNodePtr Parser::parseSelect() {
         // SELECT col [AS alias], ...
         auto parseCol = [&]() {
             SelectColumn sc;
-            // агрегатные: SUM(col) / COUNT(col) / AVG(col)
-            if      (match(TokenType::K_SUM))   sc.agg = AggFunc::SUM;
-            else if (match(TokenType::K_COUNT)) sc.agg = AggFunc::COUNT;
-            else if (match(TokenType::K_AVG))   sc.agg = AggFunc::AVG;
-
-            if (sc.agg != AggFunc::NONE) {
-                consume(TokenType::SYM_LPAREN);
-                sc.name = consume(TokenType::IDENT, "имя колонки").value;
-                consume(TokenType::SYM_RPAREN);
-            } else {
-                sc.name = consume(TokenType::IDENT, "имя колонки").value;
-            }
-
+            sc.name  = consume(TokenType::IDENT, "имя колонки").value;
             sc.alias = std::nullopt;
             if (match(TokenType::K_AS))
                 sc.alias = consume(TokenType::IDENT, "имя алиаса").value;
@@ -269,18 +258,6 @@ ColumnDef Parser::parseColumnDef() {
     if      (match(TokenType::K_NOT_NULL)) def.constraint = Constraint::NOT_NULL;
     else if (match(TokenType::K_INDEXED))  def.constraint = Constraint::INDEXED;
 
-    if (match(TokenType::K_DEFAULT)) {
-        Value dv = parseValue(); // int/string/NULL
-        // тип DEFAULT должен совпадать с типом колонки (NULL допустим)
-        bool ok = std::holds_alternative<std::monostate>(dv)
-               || (std::holds_alternative<int>(dv) && def.type == ColumnType::INT)
-               || (std::holds_alternative<std::string>(dv) && def.type == ColumnType::STRING);
-        if (!ok)
-            throw SyntaxError("Строка " + std::to_string(current().line) +
-                              ": DEFAULT-значение не совпадает с типом колонки");
-        def.default_value = dv;
-    }
-
     return def;
 }
 
@@ -309,7 +286,7 @@ Value Parser::parseValue() {
         ": ожидалось число после '-'"
     );
     if (check(TokenType::LIT_STRING))
-        return consume(TokenType::LIT_STRING).value;
+        return StringPool::instance().intern(consume(TokenType::LIT_STRING).value);
     if (match(TokenType::K_NULL))
         return std::monostate{};
     throw SyntaxError(
@@ -431,7 +408,7 @@ ExprPtr Parser::parsePrimary() {
 
     if (check(TokenType::LIT_STRING)) {
         auto node   = std::make_unique<LiteralExpr>();
-        node->value = consume(TokenType::LIT_STRING).value;
+        node->value = StringPool::instance().intern(consume(TokenType::LIT_STRING).value);
         return node;
     }
 

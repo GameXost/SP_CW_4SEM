@@ -7,6 +7,7 @@
 #include <variant>
 #include <string>
 #include "index/btree_node.h"
+#include "core/string_pool.h"
 
 namespace detail {
 
@@ -14,20 +15,18 @@ inline void writeValue(std::ostream& out, const Value& v) {
     if (std::holds_alternative<std::monostate>(v)) {
         uint8_t tag = 0;
         out.write(reinterpret_cast<const char*>(&tag), 1);
-
     } else if (std::holds_alternative<int>(v)) {
         uint8_t tag = 1;
         out.write(reinterpret_cast<const char*>(&tag), 1);
         int32_t val = static_cast<int32_t>(std::get<int>(v));
         out.write(reinterpret_cast<const char*>(&val), sizeof(val));
-
     } else {
         uint8_t tag = 2;
         out.write(reinterpret_cast<const char*>(&tag), 1);
-        const std::string& s = std::get<std::string>(v);
-        uint32_t len = static_cast<uint32_t>(s.size());
+        const auto sv = std::get<std::string_view>(v);
+        uint32_t len = static_cast<uint32_t>(sv.size());
         out.write(reinterpret_cast<const char*>(&len), sizeof(len));
-        out.write(s.data(), static_cast<std::streamsize>(len));
+        out.write(sv.data(), static_cast<std::streamsize>(len));
     }
 }
 
@@ -38,13 +37,11 @@ inline Value readValue(std::istream& in) {
 
     if (tag == 0) {
         return std::monostate{};
-
     } else if (tag == 1) {
         int32_t val = 0;
         if (!in.read(reinterpret_cast<char*>(&val), sizeof(val)))
             throw std::runtime_error("DiskNodeStore: EOF reading int");
         return static_cast<int>(val);
-
     } else if (tag == 2) {
         uint32_t len = 0;
         if (!in.read(reinterpret_cast<char*>(&len), sizeof(len)))
@@ -52,7 +49,7 @@ inline Value readValue(std::istream& in) {
         std::string s(len, '\0');
         if (!in.read(s.data(), static_cast<std::streamsize>(len)))
             throw std::runtime_error("DiskNodeStore: EOF reading string data");
-        return s;
+        return StringPool::instance().intern(std::move(s));
     }
 
     throw std::runtime_error("DiskNodeStore: unknown Value tag: " + std::to_string(tag));

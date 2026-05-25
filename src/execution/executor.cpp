@@ -3,8 +3,6 @@
 #include <regex>
 #include <stdexcept>
 #include <unordered_map>
-#include <chrono>
-#include <thread>
 
 // checker
 static void checkType(const Value& v, ColumnType t, const std::string& col) {
@@ -12,7 +10,7 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
     if (t == ColumnType::INT && !std::holds_alternative<int>(v)) {
         throw std::runtime_error("Type mismatch: column '" + col + "' expects INT");
     }
-    if (t == ColumnType::STRING && !std::holds_alternative<std::string>(v)) {
+    if (t == ColumnType::STRING && !std::holds_alternative<std::string_view>(v)) {
         throw std::runtime_error("Type mismatch: column '" + col + "' expects STRING");
     }
 }
@@ -20,23 +18,14 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
 Executor::Executor(Catalog& catalog, Storage& storage)
     : _catalog(catalog), _storage(storage), _index("./data/indexes") {}
 
-ExecuteResult Executor::execute(ASTNode& node, const std::string& query, int64_t client_id) {
+ExecuteResult Executor::execute(ASTNode& node) {
     _result = {};
-    auto t0_sys = std::chrono::system_clock::now();
-    auto t0 = std::chrono::steady_clock::now(); 
     try {
         node.accept(*this);
     } catch (const std::exception& e) {
         _result.ok = false;
         _result.message = e.what();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    auto t1_sys = t0_sys + std::chrono::duration_cast<std::chrono::system_clock::duration>(t1 - t0);
-    long long dur = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-
-    int64_t handler_id = static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    _logger.log(query, t0_sys, t1_sys, client_id, handler_id, _result.ok, _result.message);
-    _metrics.recordRequest(dur, _result.ok);
     return _result;
 }
 
@@ -109,12 +98,6 @@ void Executor::visit(InsertStmt& s) {
         }
 
         std::vector<Value> full_row(schema.columns.size(), std::monostate{});
-
-        // предзаполняем дефолтами; переданные значения перекроют их дальше
-        for (size_t i = 0; i < schema.columns.size(); ++i) {
-            if (schema.columns[i].default_value)
-                full_row[i] = *schema.columns[i].default_value;
-        }
 
         for (size_t i = 0; i < s.columns.size(); ++i) {
             int idx = schema.indexOf(s.columns[i]);
@@ -247,16 +230,6 @@ indexedEquality(const ExprNode* where, const TableSchema& schema) {
     return std::make_pair(col->name, lit->value);
 }
 
-// имя агрегатной функции для ключа JSON по умолчанию
-static const char* aggName(AggFunc f) {
-    switch (f) {
-        case AggFunc::SUM:   return "SUM";
-        case AggFunc::COUNT: return "COUNT";
-        case AggFunc::AVG:   return "AVG";
-        default:             return "";
-    }
-}
-
 // SELECT
 void Executor::visit(SelectStmt& s) {
     auto [db, table] = resolve(s.table);
@@ -291,62 +264,7 @@ void Executor::visit(SelectStmt& s) {
         records = _storage.scan(db, table);
     }
 
-    // агрегаты SUM/COUNT/AVG: либо все колонки агрегатные, либо ни одной
-    bool has_agg = false, has_plain = false;
-    for (const auto& sc : s.columns) {
-        if (sc.agg != AggFunc::NONE) has_agg = true; else has_plain = true;
-    }
-    if (has_agg && has_plain)
-        throw std::runtime_error("Cannot mix aggregate and plain columns in SELECT");
-
     nlohmann::json result = nlohmann::json::array();
-
-    if (has_agg) {
-        // индексы колонок резолвим один раз; заодно проверяем типы аргументов
-        std::vector<int> col_idx(s.columns.size());
-        for (size_t k = 0; k < s.columns.size(); ++k) {
-            int ci = schema.indexOf(s.columns[k].name);
-            if (ci < 0) throw std::runtime_error("Unknown column in SELECT: " + s.columns[k].name);
-            if ((s.columns[k].agg == AggFunc::SUM || s.columns[k].agg == AggFunc::AVG) &&
-                schema.columns[ci].type != ColumnType::INT)
-                throw std::runtime_error("SUM/AVG requires INT column: " + s.columns[k].name);
-            col_idx[k] = ci;
-        }
-
-        std::vector<long long> sums(s.columns.size(), 0);
-        std::vector<long long> counts(s.columns.size(), 0);
-
-        for (auto& [rid, bytes] : records) {
-            auto row = Serializer::decodeRow(bytes);
-            auto row_map = makeRowMap(row, schema);
-            if (!matchRow(s.where.get(), row_map)) continue;
-            for (size_t k = 0; k < s.columns.size(); ++k) {
-                const Value& v = row[col_idx[k]];
-                if (std::holds_alternative<std::monostate>(v)) continue; // NULL пропускаем
-                ++counts[k];
-                if (std::holds_alternative<int>(v)) sums[k] += std::get<int>(v);
-            }
-        }
-
-        nlohmann::json obj;
-        for (size_t k = 0; k < s.columns.size(); ++k) {
-            const auto& sc = s.columns[k];
-            std::string key = sc.alias.value_or(std::string(aggName(sc.agg)) + "(" + sc.name + ")");
-            if (sc.agg == AggFunc::COUNT) {
-                obj[key] = counts[k];
-            } else if (sc.agg == AggFunc::SUM) {
-                obj[key] = sums[k];
-            } else { // AVG
-                if (counts[k] == 0) obj[key] = nullptr;
-                else obj[key] = static_cast<double>(sums[k]) / static_cast<double>(counts[k]);
-            }
-        }
-        result.push_back(std::move(obj));
-
-        _result.message = "OK";
-        _result.data = std::move(result);
-        return;
-    }
 
     for (auto& [rid, bytes] : records) {
         auto row_map = makeRowMap(Serializer::decodeRow(bytes), schema);
@@ -387,7 +305,7 @@ std::unordered_map<std::string, Value> Executor::makeRowMap(const std::vector<Va
 nlohmann::json Executor::valueToJson(const Value& v) {
     if (std::holds_alternative<std::monostate>(v)) return nullptr;
     if (std::holds_alternative<int>(v)) return std::get<int>(v);
-    return std::get<std::string>(v);
+    return std::string(std::get<std::string_view>(v));
 }
 
 bool Executor::matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const {
@@ -419,8 +337,8 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
         auto cmp = [&]() -> int {
             if (std::holds_alternative<int>(lv) && std::holds_alternative<int>(rv))
                 return std::get<int>(lv) - std::get<int>(rv);
-            if (std::holds_alternative<std::string>(lv) && std::holds_alternative<std::string>(rv))
-                return std::get<std::string>(lv).compare(std::get<std::string>(rv));
+            if (std::holds_alternative<std::string_view>(lv) && std::holds_alternative<std::string_view>(rv))
+                return std::get<std::string_view>(lv).compare(std::get<std::string_view>(rv));
             throw std::runtime_error("Type mismatch in WHERE comparison");
         };
 
@@ -446,10 +364,10 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
             int h = std::get<int>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
-        if (std::holds_alternative<std::string>(val)) {
-            const auto& v = std::get<std::string>(val);
-            const auto& l = std::get<std::string>(lo);
-            const auto& h = std::get<std::string>(hi);
+        if (std::holds_alternative<std::string_view>(val)) {
+            const auto v = std::get<std::string_view>(val);
+            const auto l = std::get<std::string_view>(lo);
+            const auto h = std::get<std::string_view>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
         return 0;
@@ -457,10 +375,12 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
 
     if (const auto* like = dynamic_cast<const LikeExpr*>(expr)) {
         Value val = evalExpr(like->value.get(), row);
-        if (!std::holds_alternative<std::string>(val)) return 0;
+        if (!std::holds_alternative<std::string_view>(val)) return 0;
         try {
             std::regex re(like->pattern);
-            return std::regex_match(std::get<std::string>(val), re) ? 1 : 0;
+            const auto sv = std::get<std::string_view>(val);
+            // regex_match через итераторы — не нужно копировать строку
+            return std::regex_match(sv.begin(), sv.end(), re) ? 1 : 0;
         } catch (const std::regex_error&) {
             throw std::runtime_error("Invalid LIKE pattern: " + like->pattern);
         }
