@@ -35,6 +35,14 @@ enum class TokenType {
     K_INT,
     K_STRING,
 
+    // агрегатные функции
+    K_SUM,
+    K_COUNT,
+    K_AVG,
+
+    // значение по умолчанию
+    K_DEFAULT,
+
     // operations - операции
     OP_EQ,
     OP_NEQ,
@@ -91,6 +99,10 @@ inline const char* tokenName(TokenType t) {
         case TokenType::K_NULL:        return "NULL";
         case TokenType::K_INT:         return "INT";
         case TokenType::K_STRING:      return "STRING";
+        case TokenType::K_SUM:         return "SUM";
+        case TokenType::K_COUNT:       return "COUNT";
+        case TokenType::K_AVG:         return "AVG";
+        case TokenType::K_DEFAULT:     return "DEFAULT";
         case TokenType::OP_EQ:         return "==";
         case TokenType::OP_NEQ:        return "!=";
         case TokenType::OP_LT:         return "<";
