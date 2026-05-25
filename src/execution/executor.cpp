@@ -15,7 +15,8 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
     }
 }
 
-Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {}
+Executor::Executor(Catalog& catalog, Storage& storage)
+    : _catalog(catalog), _storage(storage), _index("./data/indexes") {}
 
 ExecuteResult Executor::execute(ASTNode& node) {
     _result = {};
@@ -51,6 +52,7 @@ void Executor::visit(UseStmt& s) {
     if (!_catalog.databaseExists(s.name))
         throw std::runtime_error("Unknown database: " + s.name);
     _current_db = s.name;
+    rebuildIndexes(s.name);
     _result.message = "Database changed to '" + s.name + "'.";
 }
 
@@ -279,6 +281,16 @@ void Executor::visit(SelectStmt& s) {
 
     _result.message = "OK";
     _result.data = std::move(result);
+}
+
+void Executor::rebuildIndexes(const std::string& db) {
+    for (const auto& tname : _catalog.getTableNames(db)) {
+        const auto& schema = _catalog.getSchema(db, tname);
+        for (const auto& col : schema.columns) {
+            if (col.constraint == Constraint::INDEXED)
+                _index.create(db, tname, col.name);
+        }
+    }
 }
 
 // helpers

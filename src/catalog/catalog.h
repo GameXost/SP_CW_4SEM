@@ -90,6 +90,14 @@ public:
         return _dbs.at(db).at(table);
     }
 
+    std::vector<std::string> getTableNames(const std::string& db) const {
+        requireDb(db);
+        std::vector<std::string> names;
+        for (const auto& [tname, _] : _dbs.at(db))
+            names.push_back(tname);
+        return names;
+    }
+
 private:
     std::string _path;
     std::unordered_map<std::string,

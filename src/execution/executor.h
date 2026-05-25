@@ -39,6 +39,8 @@ private:
     bool matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const;
 
     std::unordered_map<std::string, Value> makeRowMap(const std::vector<Value>& row, const TableSchema& schema) const;
-    
+
+    void rebuildIndexes(const std::string& db);
+
     static nlohmann::json valueToJson(const Value& v);
 };
