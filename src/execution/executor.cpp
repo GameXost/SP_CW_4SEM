@@ -3,6 +3,8 @@
 #include <regex>
 #include <stdexcept>
 #include <unordered_map>
+#include <chrono>
+#include <thread>
 
 // checker
 static void checkType(const Value& v, ColumnType t, const std::string& col) {
@@ -17,14 +19,23 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
 
 Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {}
 
-ExecuteResult Executor::execute(ASTNode& node) {
+ExecuteResult Executor::execute(ASTNode& node, const std::string& query, int64_t client_id) {
     _result = {};
+    auto t0_sys = std::chrono::system_clock::now();
+    auto t0 = std::chrono::steady_clock::now(); 
     try {
         node.accept(*this);
     } catch (const std::exception& e) {
         _result.ok = false;
         _result.message = e.what();
     }
+    auto t1 = std::chrono::steady_clock::now();
+    auto t1_sys = t0_sys + std::chrono::duration_cast<std::chrono::system_clock::duration>(t1 - t0);
+    long long dur = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+    int64_t handler_id = static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    _logger.log(query, t0_sys, t1_sys, client_id, handler_id, _result.ok, _result.message);
+    _metrics.recordRequest(dur, _result.ok);
     return _result;
 }
 

@@ -52,21 +52,37 @@ static bool isBlank(const std::string& s) {
 
 // лексер -> парсер -> executor -> принт
 static void runQuery(const std::string& sql, Executor& exec) {
+    // команда METRICS; показывает телеметрию
+    {
+        std::string t = sql;
+        size_t s = t.find_first_not_of(" \t\r\n");
+        size_t e = t.find_last_not_of(" \t\r\n;");
+        t = (s == std::string::npos) ? "" : t.substr(s, e - s + 1);
+        std::string upper(t.size(), '\0');
+        for (size_t i = 0; i < t.size(); ++i) upper[i] = (char)std::toupper((unsigned char)t[i]);
+        if (upper == "METRICS") {
+            const auto& m = exec.metrics();
+            std::cout << "current_rps : " << m.currentRps() << '\n'
+                      << "avg_rps_10min : " << m.avgRps10min() << '\n'
+                      << "max_rps_10min : " << m.maxRps10min() << '\n'
+                      << "avg_dur_10s_ms : " << m.avgDuration10s() << '\n'
+                      << "errors_1min : " << m.errorCount1min() << '\n';
+            return;
+        }
+    }
     try {
         Lexer lexer(sql);
         auto tokens = lexer.tokenize();
         Parser parser(std::move(tokens));
         ASTNodePtr node = parser.parse();
 
-        ExecuteResult result = exec.execute(*node);
+        ExecuteResult result = exec.execute(*node, sql, 0);
 
         if (!result.ok) {
             std::cout << "Error: " << result.message << '\n';
         } else if (!result.data.is_null()) {
-            // SELECT - data это JSON-массив строк
             std::cout << result.data.dump(2) << '\n';
         } else if (!result.message.empty()) {
-            // DDL и DML - просто сообщение об успехе
             std::cout << result.message << '\n';
         }
     } catch (const std::exception& e) {
