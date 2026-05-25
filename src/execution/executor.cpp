@@ -18,7 +18,7 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
 Executor::Executor(Catalog& catalog, Storage& storage)
     : _catalog(catalog), _storage(storage), _index("./data/indexes") {}
 
-ExecuteResult Executor::execute(ASTNode& node) {
+ExecuteResult Executor::execute(ASTNode& node, const std::string& query, int64_t client_id) {
     _result = {};
     try {
         node.accept(*this);
