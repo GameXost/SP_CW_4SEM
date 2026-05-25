@@ -8,12 +8,14 @@
 #include "catalog/catalog.h"
 #include "storage/storage.h"
 #include "index/index_manager.h"
+#include "execution/logger.h"
+#include "core/metrics.h"
 
 class Executor : public Visitor {
 public:
     Executor(Catalog& catalog, Storage& storage);
 
-    ExecuteResult execute(ASTNode& node);
+    ExecuteResult execute(ASTNode& node, const std::string& query = "", int64_t client_id = 0);
 
     void visit(CreateDatabaseStmt&) override;
     void visit(DropDatabaseStmt&) override;
@@ -25,23 +27,26 @@ public:
     void visit(DeleteStmt&) override;
     void visit(SelectStmt&) override;
 
+    const Metrics& metrics() const { return _metrics; }
+
 private:
     Catalog& _catalog;
     Storage& _storage;
     std::string _current_db;
     IndexManager _index;
     ExecuteResult _result;
+    Logger _logger;
+    Metrics _metrics;
 
     std::pair<std::string, std::string> resolve(const TableReference& ref) const;
-
-    // восстанавливает индексы из данных при старте (MemNodeStore не персистится)
-    void rebuildIndexes();
 
     Value evalExpr(const ExprNode* expr, const std::unordered_map<std::string, Value>& row) const;
 
     bool matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const;
 
     std::unordered_map<std::string, Value> makeRowMap(const std::vector<Value>& row, const TableSchema& schema) const;
-    
+
+    void rebuildIndexes(const std::string& db);
+
     static nlohmann::json valueToJson(const Value& v);
 };

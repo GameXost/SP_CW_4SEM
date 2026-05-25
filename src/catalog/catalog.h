@@ -106,9 +106,13 @@ public:
         return _dbs.at(db).at(table);
     }
 
-    // обход всех таблиц для перестройки индексов при старте
-    const std::unordered_map<std::string,
-        std::unordered_map<std::string, TableSchema>>& databases() const { return _dbs; }
+    std::vector<std::string> getTableNames(const std::string& db) const {
+        requireDb(db);
+        std::vector<std::string> names;
+        for (const auto& [tname, _] : _dbs.at(db))
+            names.push_back(tname);
+        return names;
+    }
 
 private:
     std::string _path;

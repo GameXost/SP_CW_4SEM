@@ -12,6 +12,8 @@
 
 class IndexManager {
 public:
+    explicit IndexManager(std::string indexDir = "") : _indexDir(std::move(indexDir)) {}
+
     void create(const std::string& db, const std::string& table, const std::string& column);
     void drop(const std::string& db, const std::string& table, const std::string& column);
     void insert(const std::string& db, const std::string& table, const std::string& column, const Value& key, RowId rid);
@@ -26,7 +28,7 @@ private:
         std::unique_ptr<BTree> tree;
     };
     std::unordered_map<std::string, Entry> _indexes;
-    static std::string makeKey(const std::string& db, const std::string& table,
-                               const std::string& column);
+    static std::string makeKey(const std::string& db, const std::string& table, const std::string& column);
+    std::string _indexDir;
 };
 #endif

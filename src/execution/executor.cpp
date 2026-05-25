@@ -3,6 +3,8 @@
 #include <regex>
 #include <stdexcept>
 #include <unordered_map>
+#include <chrono>
+#include <thread>
 
 // checker
 static void checkType(const Value& v, ColumnType t, const std::string& col) {
@@ -15,46 +17,26 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
     }
 }
 
-Executor::Executor(Catalog& catalog, Storage& storage) : _catalog(catalog), _storage(storage) {
-    rebuildIndexes();
-}
+Executor::Executor(Catalog& catalog, Storage& storage)
+    : _catalog(catalog), _storage(storage), _index("./data/indexes") {}
 
-// индекс держится только в памяти - при старте отстраиваем его заново из данных таблиц
-void Executor::rebuildIndexes() {
-    for (const auto& [db, tables] : _catalog.databases()) {
-        for (const auto& [table, schema] : tables) {
-            bool has_index = false;
-            for (const auto& col : schema.columns) {
-                if (col.constraint == Constraint::INDEXED) {
-                    _index.create(db, table, col.name);
-                    has_index = true;
-                }
-            }
-            if (!has_index) continue;
-
-            for (auto& [rid, bytes] : _storage.scan(db, table)) {
-                auto row = Serializer::decodeRow(bytes);
-                for (size_t i = 0; i < schema.columns.size() && i < row.size(); ++i) {
-                    if (schema.columns[i].constraint != Constraint::INDEXED) continue;
-                    // дубликаты в старых данных не должны валить старт
-                    try {
-                        _index.insert(db, table, schema.columns[i].name, row[i], rid);
-                    } catch (...) {
-                    }
-                }
-            }
-        }
-    }
-}
-
-ExecuteResult Executor::execute(ASTNode& node) {
+ExecuteResult Executor::execute(ASTNode& node, const std::string& query, int64_t client_id) {
     _result = {};
+    auto t0_sys = std::chrono::system_clock::now();
+    auto t0 = std::chrono::steady_clock::now(); 
     try {
         node.accept(*this);
     } catch (const std::exception& e) {
         _result.ok = false;
         _result.message = e.what();
     }
+    auto t1 = std::chrono::steady_clock::now();
+    auto t1_sys = t0_sys + std::chrono::duration_cast<std::chrono::system_clock::duration>(t1 - t0);
+    long long dur = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+    int64_t handler_id = static_cast<int64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    _logger.log(query, t0_sys, t1_sys, client_id, handler_id, _result.ok, _result.message);
+    _metrics.recordRequest(dur, _result.ok);
     return _result;
 }
 
@@ -87,6 +69,7 @@ void Executor::visit(UseStmt& s) {
     if (!_catalog.databaseExists(s.name))
         throw std::runtime_error("Unknown database: " + s.name);
     _current_db = s.name;
+    rebuildIndexes(s.name);
     _result.message = "Database changed to '" + s.name + "'.";
 }
 
@@ -391,6 +374,16 @@ void Executor::visit(SelectStmt& s) {
 
     _result.message = "OK";
     _result.data = std::move(result);
+}
+
+void Executor::rebuildIndexes(const std::string& db) {
+    for (const auto& tname : _catalog.getTableNames(db)) {
+        const auto& schema = _catalog.getSchema(db, tname);
+        for (const auto& col : schema.columns) {
+            if (col.constraint == Constraint::INDEXED)
+                _index.create(db, tname, col.name);
+        }
+    }
 }
 
 // helpers

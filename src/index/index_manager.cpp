@@ -1,4 +1,5 @@
 #include "index/index_manager.h"
+#include <filesystem>
 
 std::string IndexManager::makeKey(const std::string& db, const std::string& table, const std::string& column) {
     return db + "." + table + "." + column;
@@ -7,7 +8,18 @@ std::string IndexManager::makeKey(const std::string& db, const std::string& tabl
 void IndexManager::create(const std::string& db, const std::string& table, const std::string& column) {
     std::string key = makeKey(db, table, column);
     if (_indexes.count(key)) return;
-    auto store = std::make_unique<MemNodeStore>();
+
+    std::unique_ptr<NodeStore> store;
+    if (_indexDir.empty()) {
+        // fallback для тестов
+        store = std::make_unique<MemNodeStore>();
+    } else {
+        // формируем путь: data/indexes/mydb.users.id.idx
+        std::filesystem::create_directories(_indexDir);
+        std::string path = _indexDir + "/" + key + ".idx";
+        store = std::make_unique<DiskNodeStore>(path);
+    }
+
     auto tree = std::make_unique<BTree>(*store);
     _indexes[key] = Entry{std::move(store), std::move(tree)};
 }
