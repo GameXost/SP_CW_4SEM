@@ -21,9 +21,9 @@ int BTree::compareValues(const Value& a, const Value& b) {
         return (ia < ib) ? -1 : (ia > ib) ? 1 : 0;
     }
     // оба string
-    if (std::holds_alternative<std::string>(a) && std::holds_alternative<std::string>(b)) {
-        const auto& sa = std::get<std::string>(a);
-        const auto& sb = std::get<std::string>(b);
+    if (std::holds_alternative<std::string_view>(a) && std::holds_alternative<std::string_view>(b)) {
+        const auto sa = std::get<std::string_view>(a);
+        const auto sb = std::get<std::string_view>(b);
         if (sa < sb) return -1;
         if (sa > sb) return 1;
         return 0;

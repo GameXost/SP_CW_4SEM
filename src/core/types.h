@@ -7,13 +7,15 @@
 #ifndef SP_CW_4SEM_TYPES_H
 #define SP_CW_4SEM_TYPES_H
 
-#include  <string>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <optional>
 #include <vector>
 #include <cstdint>
 
-using Value = std::variant<std::monostate, int, std::string>;
+// строки хранятся как string_view без копий
+using Value = std::variant<std::monostate, int, std::string_view>;
 using Offset = std::size_t; // под вопросом. Для pager-lite не нужен, для full-pager нужен
 
 // Тип данных колонки

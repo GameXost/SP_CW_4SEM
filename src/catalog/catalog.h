@@ -1,6 +1,7 @@
 #pragma once
 #include "../parser/ast.h"
 #include "../core/types.h"
+#include "../core/string_pool.h"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -43,7 +44,7 @@ public:
                         if (std::holds_alternative<int>(*col.default_value))
                             cj["default"] = std::get<int>(*col.default_value);
                         else
-                            cj["default"] = std::get<std::string>(*col.default_value);
+                            cj["default"] = std::string(std::get<std::string_view>(*col.default_value));
                     }
                     cols_json.push_back(cj);
                 }
@@ -145,7 +146,7 @@ private:
                     // старый catalog.json без "default" -> остаётся nullopt
                     if (c.contains("default")) {
                         if (cd.type == ColumnType::INT) cd.default_value = c["default"].get<int>();
-                        else cd.default_value = c["default"].get<std::string>();
+                        else cd.default_value = StringPool::instance().intern(c["default"].get<std::string>());
                     }
                     cols.push_back(cd);
                 }

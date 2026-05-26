@@ -4,6 +4,7 @@
 
 #include "parser/parser.h"
 #include "core/exceptions.h"
+#include "core/string_pool.h"
 #include <charconv>
 
 Parser::Parser(std::vector<Token> tokens)
@@ -274,7 +275,7 @@ ColumnDef Parser::parseColumnDef() {
         // тип DEFAULT должен совпадать с типом колонки (NULL допустим)
         bool ok = std::holds_alternative<std::monostate>(dv)
                || (std::holds_alternative<int>(dv) && def.type == ColumnType::INT)
-               || (std::holds_alternative<std::string>(dv) && def.type == ColumnType::STRING);
+               || (std::holds_alternative<std::string_view>(dv) && def.type == ColumnType::STRING);
         if (!ok)
             throw SyntaxError("Строка " + std::to_string(current().line) +
                               ": DEFAULT-значение не совпадает с типом колонки");
@@ -309,7 +310,7 @@ Value Parser::parseValue() {
         ": ожидалось число после '-'"
     );
     if (check(TokenType::LIT_STRING))
-        return consume(TokenType::LIT_STRING).value;
+        return StringPool::instance().intern(consume(TokenType::LIT_STRING).value);
     if (match(TokenType::K_NULL))
         return std::monostate{};
     throw SyntaxError(
@@ -431,7 +432,7 @@ ExprPtr Parser::parsePrimary() {
 
     if (check(TokenType::LIT_STRING)) {
         auto node   = std::make_unique<LiteralExpr>();
-        node->value = consume(TokenType::LIT_STRING).value;
+        node->value = StringPool::instance().intern(consume(TokenType::LIT_STRING).value);
         return node;
     }
 

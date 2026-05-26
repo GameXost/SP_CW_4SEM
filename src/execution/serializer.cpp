@@ -1,4 +1,5 @@
 #include "execution/serializer.h"
+#include "core/string_pool.h"
 #include <stdexcept>
 #include <cstring>
 #include <climits>
@@ -47,7 +48,8 @@ void encodeValue(const Value& v, std::vector<uint8_t>& buf) {
         std::memcpy(&raw, &n, U32_BYTES);
         pushU32(raw, buf);
     } else {
-        const auto& s = std::get<std::string>(v);
+        // Value хранит string_view
+        const auto s = std::get<std::string_view>(v);
         buf.push_back(Tag::STRING);
         pushU32(static_cast<uint32_t>(s.size()), buf);
         buf.insert(buf.end(), s.begin(), s.end());
@@ -80,7 +82,7 @@ Value decodeValue(const std::vector<uint8_t>& buf, size_t& pos) {
         if (pos + len > buf.size()) throw std::runtime_error("Serializer: string out of bounds");
         std::string s(buf.begin() + pos, buf.begin() + pos + len);
         pos += len;
-        return s;
+        return StringPool::instance().intern(std::move(s));
     }
     throw std::runtime_error("Serializer: unknown tag " + std::to_string(static_cast<uint8_t>(tag)));
 }

@@ -12,7 +12,7 @@ static void checkType(const Value& v, ColumnType t, const std::string& col) {
     if (t == ColumnType::INT && !std::holds_alternative<int>(v)) {
         throw std::runtime_error("Type mismatch: column '" + col + "' expects INT");
     }
-    if (t == ColumnType::STRING && !std::holds_alternative<std::string>(v)) {
+    if (t == ColumnType::STRING && !std::holds_alternative<std::string_view>(v)) {
         throw std::runtime_error("Type mismatch: column '" + col + "' expects STRING");
     }
 }
@@ -398,7 +398,7 @@ std::unordered_map<std::string, Value> Executor::makeRowMap(const std::vector<Va
 nlohmann::json Executor::valueToJson(const Value& v) {
     if (std::holds_alternative<std::monostate>(v)) return nullptr;
     if (std::holds_alternative<int>(v)) return std::get<int>(v);
-    return std::get<std::string>(v);
+    return std::string(std::get<std::string_view>(v));
 }
 
 bool Executor::matchRow(const ExprNode* where, const std::unordered_map<std::string, Value>& row) const {
@@ -430,8 +430,8 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
         auto cmp = [&]() -> int {
             if (std::holds_alternative<int>(lv) && std::holds_alternative<int>(rv))
                 return std::get<int>(lv) - std::get<int>(rv);
-            if (std::holds_alternative<std::string>(lv) && std::holds_alternative<std::string>(rv))
-                return std::get<std::string>(lv).compare(std::get<std::string>(rv));
+            if (std::holds_alternative<std::string_view>(lv) && std::holds_alternative<std::string_view>(rv))
+                return std::get<std::string_view>(lv).compare(std::get<std::string_view>(rv));
             throw std::runtime_error("Type mismatch in WHERE comparison");
         };
 
@@ -463,11 +463,11 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
             int v = std::get<int>(val), l = std::get<int>(lo), h = std::get<int>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
-        if (std::holds_alternative<std::string>(val) &&
-            std::holds_alternative<std::string>(lo) && std::holds_alternative<std::string>(hi)) {
-            const auto& v = std::get<std::string>(val);
-            const auto& l = std::get<std::string>(lo);
-            const auto& h = std::get<std::string>(hi);
+        if (std::holds_alternative<std::string_view>(val) &&
+            std::holds_alternative<std::string_view>(lo) && std::holds_alternative<std::string_view>(hi)) {
+            const auto v = std::get<std::string_view>(val);
+            const auto l = std::get<std::string_view>(lo);
+            const auto h = std::get<std::string_view>(hi);
             return (v >= l && v < h) ? 1 : 0;
         }
         throw std::runtime_error("Type mismatch in BETWEEN");
@@ -475,10 +475,11 @@ Value Executor::evalExpr(const ExprNode* expr, const std::unordered_map<std::str
 
     if (const auto* like = dynamic_cast<const LikeExpr*>(expr)) {
         Value val = evalExpr(like->value.get(), row);
-        if (!std::holds_alternative<std::string>(val)) return 0;
+        if (!std::holds_alternative<std::string_view>(val)) return 0;
         try {
             std::regex re(like->pattern);
-            return std::regex_match(std::get<std::string>(val), re) ? 1 : 0;
+            const auto sv = std::get<std::string_view>(val);
+            return std::regex_match(sv.begin(), sv.end(), re) ? 1 : 0;
         } catch (const std::regex_error&) {
             throw std::runtime_error("Invalid LIKE pattern: " + like->pattern);
         }
