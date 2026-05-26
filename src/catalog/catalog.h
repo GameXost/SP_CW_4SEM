@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <fstream>
+#include <filesystem>
 #include <stdexcept>
 
 struct TableSchema {
@@ -51,9 +52,16 @@ public:
             j[db] = db_json;
         }
 
-        std::ofstream f(_path);
-        if (!f) throw std::runtime_error("Catalog: cannot open " + _path);
-        f << j.dump(2);
+        // пишем во временный файл, чтоб атомарность соблюдать )
+        std::string tmp = _path + ".tmp";
+        {
+            std::ofstream f(tmp);
+            if (!f) throw std::runtime_error("Catalog: cannot open " + tmp);
+            f << j.dump(2);
+            f.flush();
+            if (!f) throw std::runtime_error("Catalog: write failed " + tmp);
+        }
+        std::filesystem::rename(tmp, _path);
     }
 
     void createDatabase(const std::string& db) {

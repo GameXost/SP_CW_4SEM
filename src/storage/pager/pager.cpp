@@ -60,9 +60,13 @@ uint32_t Pager::get_page_count() {
     return disk.get_page_count();
 }
 
-// гарантирует сброс данных на диск перед освобождением памяти
+// сброс на диск перед освобождением памяти
 Pager::~Pager() {
-    flush_all();
+    // не бросаем ошибку
+    try {
+        flush_all();
+    } catch (...) {
+    }
     for (auto& [id, page] : pages) {
         delete page;
     }
