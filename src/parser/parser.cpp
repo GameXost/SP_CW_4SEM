@@ -370,7 +370,7 @@ ExprPtr Parser::parseComparison() {
 
     if (match(TokenType::K_BETWEEN)) {
         ExprPtr lo = parsePrimary();
-        consume(TokenType::K_AND); // AND внутри BETWEEN съедается здесь, не доходит до parseExpr
+        consume(TokenType::K_AND);
         ExprPtr hi  = parsePrimary();
         auto node   = std::make_unique<BetweenExpr>();
         node->value = std::move(left);
@@ -386,7 +386,7 @@ ExprPtr Parser::parseComparison() {
         return node;
     }
 
-    BinaryOper op = BinaryOper::EQ; // перезаписывается ниже; инициализация против предупреждений компилятора
+    BinaryOper op = BinaryOper::EQ;
     bool found = true;
     if      (match(TokenType::OP_EQ))  op = BinaryOper::EQ;
     else if (match(TokenType::OP_NEQ)) op = BinaryOper::NEQ;
