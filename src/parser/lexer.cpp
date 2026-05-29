@@ -59,7 +59,7 @@ void Lexer::moveNextPos() {
 void Lexer::skipSpaceAndComments() {
     while (_position < _input.size()) {
         char c = current();
-        if (std::isspace((unsigned char)c)) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
             moveNextPos();
             continue;
         }
@@ -75,7 +75,7 @@ void Lexer::skipSpaceAndComments() {
 Token Lexer::readIdent() {
     int start_line = _line;
     std::string word;
-    while (std::isalnum((unsigned char)current()) || current()=='_') {
+    while (std::isalnum(static_cast<unsigned char>(current())) || current()=='_') {
         word += current();
         moveNextPos();
     }
@@ -171,8 +171,8 @@ std::vector<Token> Lexer::tokenize() {
             tokens.push_back({TokenType::END_OF_FILE, "", _line});
             break;
         }
-        if      (std::isalpha((unsigned char)current()) || current() == '_') tokens.push_back(readIdent());
-        else if (std::isdigit((unsigned char)current())) tokens.push_back(readNumber());
+        if      (std::isalpha(static_cast<unsigned char>(current())) || current() == '_') tokens.push_back(readIdent());
+        else if (std::isdigit(static_cast<unsigned char>(current()))) tokens.push_back(readNumber());
         else if ( current() == '"') tokens.push_back(readString());
         else    tokens.push_back(readOperator());
     }

@@ -64,3 +64,33 @@ target_include_directories(prog PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # связка JSON к программе
 target_link_libraries(prog PRIVATE nlohmann_json::nlohmann_json)
+
+
+# юнит-тесты, по умолчанию выкл: cmake -DBUILD_TESTS=ON ..
+option(BUILD_TESTS "Build GoogleTest unit tests" OFF)
+
+if(BUILD_TESTS)
+    FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE) # runtime под MSVC
+    FetchContent_MakeAvailable(googletest)
+
+    # исходники без main.cpp
+    set(TEST_SOURCES ${PROJECT_SOURCES})
+    list(REMOVE_ITEM TEST_SOURCES src/main.cpp)
+
+    add_executable(cw_tests
+        ${TEST_SOURCES}
+        tests/test_lexer.cpp
+        tests/test_parser.cpp
+        tests/test_executor.cpp
+    )
+    target_include_directories(cw_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(cw_tests PRIVATE nlohmann_json::nlohmann_json GTest::gtest_main)
+
+    enable_testing()
+    add_test(NAME cw_tests COMMAND cw_tests)
+endif()
